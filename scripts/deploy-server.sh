@@ -21,18 +21,20 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-if [[ ! -f .env ]]; then
-  echo "Missing ${ROOT}/.env — copy deploy/.env.example or sync from GitHub PROD_ENV_FILE"
+ENV_FILE="${ROOT}/.env"
+
+if [[ ! -f "${ENV_FILE}" ]]; then
+  echo "Missing ${ENV_FILE} — copy deploy/.env.example or sync from GitHub PROD_ENV_FILE"
   exit 1
 fi
 
-# docker compose сам читает .env из текущей директории
-COMPOSE="docker compose -f deploy/docker-compose.yml"
+# compose с -f deploy/... ищет .env в deploy/, не в корне — указываем явно
+COMPOSE="docker compose --project-directory ${ROOT} -f deploy/docker-compose.yml --env-file ${ENV_FILE}"
 
-if grep -q '^WM_VERSION=' .env; then
-  sed -i "s/^WM_VERSION=.*/WM_VERSION=${VERSION}/" .env
+if grep -q '^WM_VERSION=' "${ENV_FILE}"; then
+  sed -i "s/^WM_VERSION=.*/WM_VERSION=${VERSION}/" "${ENV_FILE}"
 else
-  echo "WM_VERSION=${VERSION}" >> .env
+  echo "WM_VERSION=${VERSION}" >> "${ENV_FILE}"
 fi
 
 export WM_VERSION="${VERSION}"
@@ -44,7 +46,7 @@ echo "    Web: plwatermelon/watermelon-messenger-web:${VERSION}"
 $COMPOSE pull api web
 $COMPOSE up -d --remove-orphans
 
-DOMAIN="$(grep -E '^WM_DOMAIN=' .env | cut -d= -f2- | tr -d '"' || echo watermelon-messenger.ru)"
+DOMAIN="$(grep -E '^WM_DOMAIN=' "${ENV_FILE}" | cut -d= -f2- | tr -d '"' || echo watermelon-messenger.ru)"
 echo "==> Waiting for https://${DOMAIN}/api/health ..."
 for i in $(seq 1 30); do
   if curl -sfk "https://${DOMAIN}/api/health" >/dev/null 2>&1; then
