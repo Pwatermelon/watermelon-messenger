@@ -63,26 +63,23 @@ sudo chown -R $USER:$USER /opt/watermelon-messenger
 
 `DEPLOY_SSH_USER` (например `ubuntu`) должен **владеть** каталогом — иначе rsync из CI получит `Permission denied`.
 
-### TLS (Let's Encrypt) — apex + www
+### TLS (Let's Encrypt) — автоматически при deploy
 
-**DNS** (обязательно оба):
-| Запись | Значение |
-|--------|----------|
-| `A` `@` → IP сервера | |
-| `A` `www` → IP сервера | |
+**DNS:**
+| A `@` | IP сервера |
+| A `www` | IP сервера |
 
-**В `.env`:**
+**В `.env` / `PROD_ENV_FILE`:**
 ```env
-WM_DOMAIN=watermelon-messenger.ru
 CERTBOT_EMAIL=you@example.com
-WM_NGINX_CONF=nginx.http.conf
 ```
 
-**Порядок:**
-1. `docker compose ... up -d` — сайт на **HTTP** (без cert nginx не падает)
-2. `./scripts/certbot-init.sh` — cert для `watermelon-messenger.ru` + `www`, переключение на HTTPS
+При каждом `ver X.Y.Z` deploy **сам**:
+1. Поднимает stack
+2. Если cert нет → Let's Encrypt (apex + www) → HTTPS
+3. Если cert есть → сразу HTTPS
 
-Certbot продлевает cert автоматически (контейнер `certbot`).
+Ручной `./scripts/certbot-init.sh` не нужен.
 
 ## Yandex OAuth
 
