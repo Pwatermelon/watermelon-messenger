@@ -2,7 +2,7 @@
 # Usage on server:
 #   cp deploy/.env.example .env && nano .env
 #   ./scripts/certbot-init.sh   # first time only
-#   docker compose --project-directory . -f deploy/docker-compose.yml --env-file .env up -d
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d
 
 name: watermelon-prod
 

@@ -28,8 +28,8 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
-# compose с -f deploy/... ищет .env в deploy/, не в корне — указываем явно
-COMPOSE="docker compose --project-directory ${ROOT} -f deploy/docker-compose.yml --env-file ${ENV_FILE}"
+# compose file in deploy/ — paths like ./nginx.prod.conf resolve from deploy/
+COMPOSE="docker compose -f deploy/docker-compose.yml --env-file ${ENV_FILE}"
 
 if grep -q '^WM_VERSION=' "${ENV_FILE}"; then
   sed -i "s/^WM_VERSION=.*/WM_VERSION=${VERSION}/" "${ENV_FILE}"

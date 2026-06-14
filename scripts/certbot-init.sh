@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${ROOT}/.env}"
-COMPOSE="docker compose --project-directory ${ROOT} -f deploy/docker-compose.yml --env-file ${ENV_FILE}"
+COMPOSE="docker compose -f deploy/docker-compose.yml --env-file ${ENV_FILE}"
 
 cd "${ROOT}"
 
