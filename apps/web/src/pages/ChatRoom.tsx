@@ -800,6 +800,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     const fromFiles = Array.from(e.clipboardData.files ?? []);
     if (fromFiles.length > 0) {
       e.preventDefault();
+      e.stopPropagation();
       void uploadFiles(fromFiles);
       return;
     }
@@ -812,6 +813,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     }
     if (pasted.length > 0) {
       e.preventDefault();
+      e.stopPropagation();
       void uploadFiles(pasted);
     }
   }
@@ -1432,7 +1434,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
           onChange={handleFileSelect}
           style={{ display: "none" }}
         />
-        <form onSubmit={handleSubmit} className="compose-form compose-form-inline" onPaste={handleComposePaste}>
+        <form onSubmit={handleSubmit} className="compose-form compose-form-inline">
           <div className="compose-attach-wrap">
             <button
               type="button"
