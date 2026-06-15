@@ -4,7 +4,6 @@ import { canPlayMediaUrl, mimeFromMediaUrl } from "../utils/mediaMime";
 import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback";
 
 const OUTER = 220;
-const VIDEO = 188;
 const RING = 5;
 const RING_HIT = 18;
 const R = (OUTER - RING) / 2;
