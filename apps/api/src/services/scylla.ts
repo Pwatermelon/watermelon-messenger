@@ -232,7 +232,7 @@ export async function countUnreadMessages(
       return total;
     }
 
-    const lowerExclusive = types.TimeUuid.fromString(lastReadMessageId);
+    const lowerExclusive = types.TimeUuid.fromString(lastReadMessageId.trim().toLowerCase());
     let total = 0;
     let upperExclusive: types.TimeUuid | null = null;
     for (;;) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketContext } from "../context/WebSocketContext";
 import { ComposeRecorder } from "../components/ComposeRecorder";
@@ -6,6 +6,8 @@ import { VoiceMessagePlayer } from "../components/VoiceMessagePlayer";
 import { CircleMessagePlayer } from "../components/CircleMessagePlayer";
 import { MessageContextMenu } from "../components/MessageContextMenu";
 import { ForwardMessageModal } from "../components/ForwardMessageModal";
+import { LocationPickerModal } from "../components/LocationPickerModal";
+import { LocationPreview } from "../components/LocationPreview";
 import ImageCropModal from "../components/ImageCropModal";
 import BirthdayInfoBlock from "../components/BirthdayInfoBlock";
 import { IconAttach, IconFile, IconLocation, IconPhoto, IconSend, IconTrash, IconVideo, IconBack } from "../components/Icons";
@@ -17,6 +19,8 @@ import type { MessageItem } from "../api";
 import { getWsUrl } from "../config";
 import { mediaUrl, mediaDownloadUrl } from "../utils/mediaUrl";
 import { buildReplyTo } from "../utils/messagePreview";
+import { linkifyText } from "../utils/linkify";
+import { parseLocationCoords } from "../utils/yandexMaps";
 
 type ChatRoomProps = {
   chatId: string;
@@ -28,7 +32,7 @@ type ChatRoomProps = {
 
 const MESSAGE_PAGE_SIZE = 50;
 
-export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, showBack = false }: ChatRoomProps) {
+export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: _onSyncPreview, showBack = false }: ChatRoomProps) {
   const { user } = useAuth();
   const { send, ready, status, reconnect, subscribe } = useWebSocketContext();
   const [chat, setChat] = useState<Chat | null>(null);
@@ -40,6 +44,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const groupAvatarInputRef = useRef<HTMLInputElement>(null);
   const [groupAvatarCropFile, setGroupAvatarCropFile] = useState<File | null>(null);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
@@ -68,6 +73,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
   const hasMoreOlderRef = useRef(true);
   const loadingOlderRef = useRef(false);
   const loadingRef = useRef(true);
+  const pendingScrollRestoreRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -85,14 +91,15 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
 
   function markChatRead(messageId: string) {
     if (!chatId || !user?.id) return;
+    const normalized = messageId.toLowerCase();
     const mine = readCursorsRef.current[user.id];
-    if (mine && mine >= messageId) return;
-    readCursorsRef.current[user.id] = messageId;
-    setReadCursors((prev) => ({ ...prev, [user.id]: messageId }));
+    if (mine && mine.toLowerCase() >= normalized) return;
+    readCursorsRef.current[user.id] = normalized;
+    setReadCursors((prev) => ({ ...prev, [user.id]: normalized }));
     if (ready) {
-      send({ type: "mark_read", chatId, messageId });
+      send({ type: "mark_read", chatId, messageId: normalized });
     }
-    void markChatReadApi(chatId, messageId).catch(() => {});
+    void markChatReadApi(chatId, normalized).catch(() => {});
   }
 
   function isMessageReadByPeers(m: Message): boolean {
@@ -210,7 +217,12 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
     loadingOlderRef.current = true;
     setLoadingOlder(true);
     const listEl = listRef.current;
-    const prevHeight = listEl?.scrollHeight ?? 0;
+    if (listEl) {
+      pendingScrollRestoreRef.current = {
+        scrollHeight: listEl.scrollHeight,
+        scrollTop: listEl.scrollTop,
+      };
+    }
 
     try {
       const { messages: older } = await getMessages(chatId, MESSAGE_PAGE_SIZE, oldest.id);
@@ -225,12 +237,11 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id));
         const fresh = batch.filter((m) => !ids.has(m.id));
+        if (fresh.length === 0) pendingScrollRestoreRef.current = null;
         return fresh.length > 0 ? [...fresh, ...prev] : prev;
       });
-      requestAnimationFrame(() => {
-        if (listEl) listEl.scrollTop += listEl.scrollHeight - prevHeight;
-      });
     } catch (err) {
+      pendingScrollRestoreRef.current = null;
       console.error(err);
     } finally {
       loadingOlderRef.current = false;
@@ -272,8 +283,6 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
           const more = list.length >= MESSAGE_PAGE_SIZE;
           hasMoreOlderRef.current = more;
           if (cursors?.length) applyReadCursors(cursors);
-          const last = list[list.length - 1];
-          if (last) onSyncPreview?.(last as Message);
         }
       })
       .catch(() => {
@@ -291,7 +300,26 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
     return () => {
       cancelled = true;
     };
-  }, [chatId, onClose, onSyncPreview]);
+  }, [chatId, onClose]);
+
+  useLayoutEffect(() => {
+    const pending = pendingScrollRestoreRef.current;
+    if (!pending) return;
+    const el = listRef.current;
+    if (!el) return;
+    pendingScrollRestoreRef.current = null;
+    el.scrollTop = pending.scrollTop + (el.scrollHeight - pending.scrollHeight);
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      const id = chatId;
+      const msgs = messagesRef.current;
+      if (!id || msgs.length === 0) return;
+      const lastId = msgs[msgs.length - 1]!.id.toLowerCase();
+      void markChatReadApi(id, lastId).catch(() => {});
+    };
+  }, [chatId]);
 
   const scrollToBottom = useCallback((instant: boolean) => {
     const list = listRef.current;
@@ -317,10 +345,16 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
 
   useEffect(() => {
     if (loading || messages.length === 0) return;
+    if (pendingScrollRestoreRef.current || loadingOlderRef.current) return;
 
     if (pendingInitialScrollRef.current) {
-      pendingInitialScrollRef.current = false;
-      const snap = () => scrollToBottom(true);
+      const snap = () => {
+        if (!stickToBottomRef.current) {
+          pendingInitialScrollRef.current = false;
+          return;
+        }
+        scrollToBottom(true);
+      };
       snap();
       requestAnimationFrame(() => {
         snap();
@@ -328,7 +362,10 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
       });
       const t1 = window.setTimeout(snap, 100);
       const t2 = window.setTimeout(snap, 400);
-      const t3 = window.setTimeout(snap, 900);
+      const t3 = window.setTimeout(() => {
+        snap();
+        pendingInitialScrollRef.current = false;
+      }, 900);
       return () => {
         window.clearTimeout(t1);
         window.clearTimeout(t2);
@@ -510,21 +547,17 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
   }
 
   function handleLocation() {
-    if (!navigator.geolocation) return;
-    setSending(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        sendMessage({
-          content: `Location: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-          messageType: "location",
-          attachmentMetadata: { lat, lng },
-        });
-        setSending(false);
-      },
-      () => setSending(false)
-    );
+    setAttachMenuOpen(false);
+    setLocationPickerOpen(true);
+  }
+
+  async function sendLocation(lat: number, lng: number) {
+    setLocationPickerOpen(false);
+    await sendMessage({
+      content: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      messageType: "location",
+      attachmentMetadata: { lat, lng },
+    });
   }
 
   async function handleVoiceSend(blob: Blob, d: number) {
@@ -949,7 +982,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
                 </button>
               )}
               {(m.messageType ?? "text") === "text" && (
-                <p className="message-content">{displayContent(m)}</p>
+                <p className="message-content">{linkifyText(displayContent(m))}</p>
               )}
               {(m.messageType ?? "text") === "image" && m.attachmentUrl && (() => {
                 const imgUrl = mediaUrl(m.attachmentUrl);
@@ -978,16 +1011,11 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
               {(m.messageType ?? "text") === "video" && m.attachmentUrl && (
                 <video src={mediaUrl(m.attachmentUrl)} controls className="message-video" />
               )}
-              {(m.messageType ?? "text") === "location" && m.attachmentMetadata?.lat != null && (
-                <a
-                  href={`https://yandex.ru/maps/?pt=${m.attachmentMetadata.lng},${m.attachmentMetadata.lat}&z=16&l=map`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="message-location"
-                >
-                  <IconLocation size={16} /> Геопозиция
-                </a>
-              )}
+              {(m.messageType ?? "text") === "location" && (() => {
+                const loc = parseLocationCoords(m.content, m.attachmentMetadata);
+                if (!loc) return <p className="message-content">{linkifyText(displayContent(m))}</p>;
+                return <LocationPreview lat={loc.lat} lng={loc.lng} />;
+              })()}
               {(m.messageType ?? "text") === "voice" && m.attachmentUrl && (
                 <VoiceMessagePlayer
                   src={mediaUrl(m.attachmentUrl)}
@@ -1083,7 +1111,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
                   <button type="button" onClick={() => openAttach("image/*")}><IconPhoto size={18} /> Фото</button>
                   <button type="button" onClick={() => openAttach("video/*")}><IconVideo size={18} /> Видео</button>
                   <button type="button" onClick={() => openAttach("*/*")}><IconFile size={18} /> Файл</button>
-                  <button type="button" onClick={() => { setAttachMenuOpen(false); handleLocation(); }}><IconLocation size={18} /> Геометка</button>
+                  <button type="button" onClick={handleLocation}><IconLocation size={18} /> Геометка</button>
                 </div>
               </>
             )}
@@ -1395,6 +1423,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview, 
             void uploadGroupAvatar(cropped);
           }}
           onCancel={() => setGroupAvatarCropFile(null)}
+        />
+      )}
+
+      {locationPickerOpen && (
+        <LocationPickerModal
+          onConfirm={(lat, lng) => void sendLocation(lat, lng)}
+          onCancel={() => setLocationPickerOpen(false)}
         />
       )}
     </>

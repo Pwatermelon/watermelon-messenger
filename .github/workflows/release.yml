@@ -146,6 +146,7 @@ jobs:
           push: true
           build-args: |
             WM_VERSION=${{ steps.meta.outputs.version }}
+            VITE_YANDEX_MAPS_API_KEY=${{ secrets.VITE_YANDEX_MAPS_API_KEY }}
           tags: |
             ${{ steps.meta.outputs.web }}:${{ steps.meta.outputs.version }}
 

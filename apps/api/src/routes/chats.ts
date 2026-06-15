@@ -83,6 +83,42 @@ async function signChatDto<T extends ChatDto>(chat: T, viewerId: string): Promis
   return { ...chat, avatarUrl, members };
 }
 
+async function buildChatDto(
+  chat: typeof chats.$inferSelect,
+  members: Array<{ user: typeof users.$inferSelect; role: string }>,
+  viewerId: string,
+  lastRead: string | null
+): Promise<ChatDto> {
+  let lastMessagePreview: string | null = null;
+  let lastMessageAt: string | null = null;
+  try {
+    const [first] = await scyllaGetMessages(chat.id, 1);
+    if (first) {
+      lastMessagePreview = first.content.slice(0, 80);
+      lastMessageAt = first.created_at?.toISOString?.() ?? null;
+    }
+  } catch {
+    // Scylla might be unavailable
+  }
+  let unreadCount = 0;
+  try {
+    unreadCount = await scyllaCountUnreadMessages(chat.id, lastRead, viewerId);
+  } catch {
+    unreadCount = 0;
+  }
+  return {
+    id: chat.id,
+    type: chat.type,
+    name: chat.name,
+    avatarUrl: chat.avatarUrl,
+    createdAt: chat.createdAt?.toISOString?.(),
+    lastMessageAt,
+    lastMessagePreview,
+    unreadCount,
+    members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
+  };
+}
+
 async function publishGroupSystemEvent(chatId: string, actorId: string, content: string): Promise<void> {
   const { messageId, createdAt } = await scyllaInsertMessage(chatId, actorId, content, {
     messageType: "system",
@@ -257,19 +293,9 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         .from(chatMembers)
         .innerJoin(users, eq(users.id, chatMembers.userId))
         .where(eq(chatMembers.chatId, chat.id));
-      return signChatDto(
-        {
-          id: chat.id,
-          type: chat.type,
-          name: chat.name,
-          avatarUrl: chat.avatarUrl,
-          createdAt: chat.createdAt?.toISOString?.(),
-          lastMessageAt: null,
-          lastMessagePreview: null,
-          members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
-        },
-        u.id
-      );
+      const readMap = await getUserReadCursorsByChat(u.id);
+      const lastRead = readMap.get(chat.id) ?? null;
+      return signChatDto(await buildChatDto(chat, members, u.id, lastRead), u.id);
     }
     const [chat] = await db.insert(chats).values({ type: "dm" }).returning();
     await db.insert(chatMembers).values([
@@ -281,19 +307,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       .from(chatMembers)
       .innerJoin(users, eq(users.id, chatMembers.userId))
       .where(eq(chatMembers.chatId, chat.id));
-    return signChatDto(
-      {
-        id: chat.id,
-        type: chat.type,
-        name: chat.name,
-        avatarUrl: chat.avatarUrl,
-        createdAt: chat.createdAt?.toISOString?.(),
-        lastMessageAt: null,
-        lastMessagePreview: null,
-        members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
-      },
-      u.id
-    );
+    return signChatDto(await buildChatDto(chat, members, u.id, null), u.id);
   })
   .post("/group", async ({ user, body, set }) => {
     const u = requireAuth(set)(user);

@@ -279,7 +279,11 @@ export default function ChatLayout() {
       setSidebarUser(null);
       setSidebarQuery("");
       setSidebarTab("chats");
-      setChats((prev) => [chat as Chat, ...prev.filter((c) => c.id !== chat.id)]);
+      setChats((prev) => {
+        const prior = prev.find((c) => c.id === chat.id);
+        const merged: Chat = { ...(prior ?? {}), ...(chat as Chat), unreadCount: 0 };
+        return sortChatsByRecent([merged, ...prev.filter((c) => c.id !== chat.id)]);
+      });
       await openChat(chat.id);
       return true;
     } catch (e) {
