@@ -65,6 +65,8 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   const stickToBottomRef = useRef(true);
   const pendingInitialScrollRef = useRef(false);
   const suppressAutoReadRef = useRef(false);
+  const serverUnreadCountRef = useRef(0);
+  const [serverUnreadCount, setServerUnreadCount] = useState(0);
   const [unreadJumpCount, setUnreadJumpCount] = useState(0);
   const fileDragDepthRef = useRef(0);
   const longPressRef = useRef<number | null>(null);
@@ -118,6 +120,8 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
       send(messageId ? { type: "mark_read", chatId, messageId: messageId.toLowerCase() } : { type: "mark_read", chatId });
     }
     void markChatReadApi(chatId, messageId).then(() => {
+      serverUnreadCountRef.current = 0;
+      setServerUnreadCount(0);
       window.dispatchEvent(new CustomEvent("wm:chat-read", { detail: { chatId } }));
     }).catch(() => {});
   }
@@ -157,6 +161,8 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     stickToBottomRef.current = true;
     pendingInitialScrollRef.current = true;
     suppressAutoReadRef.current = false;
+    serverUnreadCountRef.current = 0;
+    setServerUnreadCount(0);
     setUnreadJumpCount(0);
   }, [chatId]);
 
@@ -187,38 +193,60 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
 
   const myLastReadId = user?.id ? (readCursors[user.id] ?? readCursorsRef.current[user.id] ?? null) : null;
   const unreadBounds = useMemo(
-    () => (user?.id ? findUnreadBounds(messages, myLastReadId, user.id) : { first: null, last: null, count: 0 }),
-    [messages, myLastReadId, user?.id]
+    () =>
+      user?.id
+        ? findUnreadBounds(messages, myLastReadId, user.id, serverUnreadCount)
+        : { first: null, last: null, count: 0 },
+    [messages, myLastReadId, user?.id, serverUnreadCount]
   );
 
   const refreshUnreadJumpCount = useCallback(() => {
     const list = listRef.current;
-    if (!list || !user?.id) {
+    if (!list || !user?.id || serverUnreadCountRef.current <= 0) {
       setUnreadJumpCount(0);
       return;
     }
-    setUnreadJumpCount(countUnreadBelowViewport(list, messagesRef.current, readCursorsRef.current[user.id] ?? null, user.id));
+    setUnreadJumpCount(
+      countUnreadBelowViewport(
+        list,
+        messagesRef.current,
+        readCursorsRef.current[user.id] ?? null,
+        user.id,
+        serverUnreadCountRef.current
+      )
+    );
   }, [user?.id]);
 
   const tryMarkReadFromScroll = useCallback(() => {
     if (!chatId || !user?.id || messagesRef.current.length === 0) return;
     const list = listRef.current;
+    const latestId = messagesRef.current[messagesRef.current.length - 1]!.id;
+
+    if (serverUnreadCountRef.current <= 0) {
+      if (stickToBottomRef.current) markChatRead(latestId);
+      return;
+    }
+
     if (!list) return;
 
     const lastRead = readCursorsRef.current[user.id] ?? null;
-    const bounds = findUnreadBounds(messagesRef.current, lastRead, user.id);
+    const bounds = findUnreadBounds(messagesRef.current, lastRead, user.id, serverUnreadCountRef.current);
 
     if (!bounds.last) {
       if (stickToBottomRef.current) {
         suppressAutoReadRef.current = false;
-        markChatRead(messagesRef.current[messagesRef.current.length - 1]!.id);
+        serverUnreadCountRef.current = 0;
+        setServerUnreadCount(0);
+        markChatRead(latestId);
       }
       return;
     }
 
     if (!isMessageBelowViewport(list, bounds.last.id)) {
       suppressAutoReadRef.current = false;
-      markChatRead(messagesRef.current[messagesRef.current.length - 1]!.id);
+      serverUnreadCountRef.current = 0;
+      setServerUnreadCount(0);
+      markChatRead(latestId);
     }
   }, [chatId, user?.id]);
 
@@ -226,20 +254,31 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     return subscribe((msg) => {
       if (msg.type === "message" && msg.message.chatId === chatId) {
         const incoming = msg.message;
+        const fromOther = incoming.senderId !== user?.id;
         const attach = incoming.attachmentUrl;
+        const afterAppend = (next: Message[]) => {
+          if (fromOther && !stickToBottomRef.current) {
+            serverUnreadCountRef.current += 1;
+            setServerUnreadCount((c) => c + 1);
+            suppressAutoReadRef.current = true;
+          } else if (fromOther && stickToBottomRef.current) {
+            markChatRead(incoming.id);
+          }
+          return next;
+        };
         if (attach && !attach.includes("access=")) {
           void signMediaPaths([attach]).then((urls) => {
             const signed = urls[attach];
             setMessages((prev) => {
               if (prev.some((m) => m.id === incoming.id)) return prev;
-              return [...prev, { ...incoming, attachmentUrl: signed ?? attach }];
+              return afterAppend([...prev, { ...incoming, attachmentUrl: signed ?? attach }]);
             });
           });
           return;
         }
         setMessages((prev) => {
           if (prev.some((m) => m.id === incoming.id)) return prev;
-          return [...prev, incoming];
+          return afterAppend([...prev, incoming]);
         });
       }
       if (msg.type === "message_deleted" && msg.chatId === chatId) {
@@ -266,7 +305,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         window.dispatchEvent(new Event("wm:refresh-chats"));
       }
     });
-  }, [subscribe, chatId]);
+  }, [subscribe, chatId, user?.id]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!chatId || loadOlderLockRef.current || !hasMoreOlderRef.current || loadingRef.current) return;
@@ -321,7 +360,14 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   useEffect(() => {
     if (!chatId || messages.length === 0 || !user?.id) return;
     if (prependingOlderRef.current || loadingOlderRef.current) return;
-    if (suppressAutoReadRef.current) return;
+    if (suppressAutoReadRef.current) {
+      refreshUnreadJumpCount();
+      return;
+    }
+    if (serverUnreadCountRef.current <= 0) {
+      if (stickToBottomRef.current) markChatRead(messages[messages.length - 1]!.id);
+      return;
+    }
     if (!stickToBottomRef.current) {
       refreshUnreadJumpCount();
       return;
@@ -355,19 +401,20 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
       });
 
     getMessages(chatId, MESSAGE_PAGE_SIZE)
-      .then(({ messages: list, readCursors: cursors }) => {
+      .then(({ messages: list, readCursors: cursors, myLastReadMessageId, unreadCount }) => {
         if (!cancelled) {
+          const unread = unreadCount ?? 0;
+          serverUnreadCountRef.current = unread;
+          setServerUnreadCount(unread);
+          if (cursors?.length) applyReadCursors(cursors);
+          if (user?.id && myLastReadMessageId) {
+            readCursorsRef.current[user.id] = myLastReadMessageId;
+            setReadCursors((prev) => ({ ...prev, [user.id]: myLastReadMessageId }));
+          }
+          suppressAutoReadRef.current = unread > 0;
           setMessages(list as Message[]);
           const more = list.length >= MESSAGE_PAGE_SIZE;
           hasMoreOlderRef.current = more;
-          if (cursors?.length) applyReadCursors(cursors);
-          if (user?.id) {
-            suppressAutoReadRef.current = findUnreadBounds(
-              list as Message[],
-              readCursorsRef.current[user.id] ?? null,
-              user.id
-            ).count > 0;
-          }
         }
       })
       .catch(() => {
@@ -473,7 +520,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     if (pendingInitialScrollRef.current) {
       if (!user?.id) return;
       const list = listRef.current;
-      const firstUnread = unreadBounds.first;
+      const firstUnread = serverUnreadCount > 0 ? unreadBounds.first : null;
 
       const snap = () => {
         if (!list) return;
@@ -512,7 +559,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     if (stickToBottomRef.current) {
       scrollToBottom(false);
     }
-  }, [messages, loading, scrollToBottom, unreadBounds.first, refreshUnreadJumpCount, tryMarkReadFromScroll]);
+  }, [messages, loading, scrollToBottom, unreadBounds.first, serverUnreadCount, refreshUnreadJumpCount, tryMarkReadFromScroll]);
 
   function dispatchMessage(
     opts: {
@@ -593,9 +640,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }
 
   function jumpToLastUnread() {
-    if (!unreadBounds.last) return;
-    scrollToMessage(unreadBounds.last.id, "end");
-    stickToBottomRef.current = false;
+    const list = listRef.current;
+    if (!unreadBounds.last || !list) return;
+    scrollListToMessage(list, unreadBounds.last.id, "nearest", 24);
+    requestAnimationFrame(() => {
+      refreshUnreadJumpCount();
+      tryMarkReadFromScroll();
+    });
   }
 
   function handleReplyStart(m: Message) {
@@ -1216,7 +1267,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         )}
         <div ref={messagesEndRef} />
       </div>
-      {unreadJumpCount > 0 && unreadBounds.last && (
+      {unreadJumpCount > 0 && unreadBounds.last && serverUnreadCount > 0 && (
         <button
           type="button"
           className="messages-unread-jump"

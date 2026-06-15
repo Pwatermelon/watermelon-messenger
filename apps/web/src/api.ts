@@ -294,7 +294,12 @@ export async function getMessages(
   chatId: string,
   limit?: number,
   before?: string
-): Promise<{ messages: MessageItem[]; readCursors?: ReadCursor[] }> {
+): Promise<{
+  messages: MessageItem[];
+  readCursors?: ReadCursor[];
+  myLastReadMessageId?: string | null;
+  unreadCount?: number;
+}> {
   const params = new URLSearchParams();
   if (limit) params.set("limit", String(limit));
   if (before) params.set("before", before);

@@ -596,7 +596,10 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       })
     );
     const readCursors = await getReadCursors(chatId);
-    return { messages: messages.slice().reverse(), readCursors };
+    const readMap = await getUserReadCursorsByChat(u.id);
+    const myLastReadMessageId = readMap.get(chatId) ?? null;
+    const unreadCount = await resolveUnreadCount(chatId, u.id, myLastReadMessageId);
+    return { messages: messages.slice().reverse(), readCursors, myLastReadMessageId, unreadCount };
   })
   .patch("/:id/messages/:messageId", async ({ user, params, body, set }) => {
     const u = requireAuth(set)(user);
