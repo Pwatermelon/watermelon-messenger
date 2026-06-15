@@ -5,9 +5,10 @@ import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback
 
 const OUTER = 220;
 const RING = 5;
-const RING_HIT = 18;
+const RING_HIT = 28;
 const R = (OUTER - RING) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * R;
+const VIDEO_R = 94;
 
 type Props = {
   src: string;
@@ -31,6 +32,7 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const ringRef = useRef<SVGSVGElement>(null);
   const scrubbingRef = useRef(false);
+  const wasPlayingRef = useRef(false);
   const stopRef = useRef<() => void>(() => {});
 
   const [playing, setPlaying] = useState(false);
@@ -55,32 +57,61 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
 
   stopRef.current = stopPlayback;
 
+  const seekFromPointer = useCallback((clientX: number, clientY: number) => {
+    const rect = ringRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const dur = video.duration;
+    if (!dur || !Number.isFinite(dur)) return;
+    const pct = angleFromPointer(clientX, clientY, rect);
+    const t = Math.max(0, Math.min(1, pct)) * dur;
+    video.currentTime = t;
+    setProgress(t / dur);
+    setCurrent(t);
+  }, []);
+
   const scrubHandlersRef = useRef({
     onMove: (e: PointerEvent) => {
       if (!scrubbingRef.current) return;
       e.preventDefault();
-      const rect = ringRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const video = videoRef.current;
-      if (!video) return;
-      const dur = video.duration;
-      if (!dur || !Number.isFinite(dur)) return;
-      const pct = angleFromPointer(e.clientX, e.clientY, rect);
-      const t = Math.max(0, Math.min(1, pct)) * dur;
-      video.currentTime = t;
-      setProgress(t / dur);
-      setCurrent(t);
+      seekFromPointer(e.clientX, e.clientY);
     },
     onUp: (e: PointerEvent) => {
       if (!scrubbingRef.current) return;
       e.preventDefault();
-      scrubHandlersRef.current.onMove(e);
+      seekFromPointer(e.clientX, e.clientY);
       scrubbingRef.current = false;
+      const video = videoRef.current;
+      if (video && wasPlayingRef.current) {
+        void video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      }
       document.removeEventListener("pointermove", scrubHandlersRef.current.onMove);
       document.removeEventListener("pointerup", scrubHandlersRef.current.onUp);
       document.removeEventListener("pointercancel", scrubHandlersRef.current.onUp);
     },
   });
+
+  useEffect(() => {
+    scrubHandlersRef.current.onMove = (e: PointerEvent) => {
+      if (!scrubbingRef.current) return;
+      e.preventDefault();
+      seekFromPointer(e.clientX, e.clientY);
+    };
+    scrubHandlersRef.current.onUp = (e: PointerEvent) => {
+      if (!scrubbingRef.current) return;
+      e.preventDefault();
+      seekFromPointer(e.clientX, e.clientY);
+      scrubbingRef.current = false;
+      const video = videoRef.current;
+      if (video && wasPlayingRef.current) {
+        void video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      }
+      document.removeEventListener("pointermove", scrubHandlersRef.current.onMove);
+      document.removeEventListener("pointerup", scrubHandlersRef.current.onUp);
+      document.removeEventListener("pointercancel", scrubHandlersRef.current.onUp);
+    };
+  }, [seekFromPointer]);
 
   useEffect(() => {
     return () => {
@@ -100,6 +131,7 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
     if (!video) return;
 
     const onTime = () => {
+      if (scrubbingRef.current) return;
       if (video.duration && Number.isFinite(video.duration)) {
         setProgress(video.currentTime / video.duration);
         setCurrent(video.currentTime);
@@ -162,12 +194,24 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
     }
   }
 
-  function handleRingPointerDown(e: React.PointerEvent<SVGCircleElement>) {
+  function handleRingPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (unsupported) return;
+    const rect = ringRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+    if (dist < VIDEO_R - 8) return;
+
     e.preventDefault();
     e.stopPropagation();
+    const video = videoRef.current;
+    wasPlayingRef.current = !!video && !video.paused;
+    if (video && wasPlayingRef.current) video.pause();
+
     scrubbingRef.current = true;
-    scrubHandlersRef.current.onMove(e.nativeEvent);
+    seekFromPointer(e.clientX, e.clientY);
+    ringRef.current?.setPointerCapture(e.pointerId);
     document.addEventListener("pointermove", scrubHandlersRef.current.onMove, { passive: false });
     document.addEventListener("pointerup", scrubHandlersRef.current.onUp, { passive: false });
     document.addEventListener("pointercancel", scrubHandlersRef.current.onUp, { passive: false });
@@ -213,6 +257,7 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
         height={OUTER}
         viewBox={`0 0 ${OUTER} ${OUTER}`}
         aria-hidden
+        onPointerDown={handleRingPointerDown}
       >
         <circle
           cx={cx}
@@ -221,7 +266,6 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
           className="circle-player-ring-hit"
           fill="none"
           strokeWidth={RING_HIT}
-          onPointerDown={handleRingPointerDown}
         />
         <circle cx={cx} cy={cx} r={R} className="circle-player-ring-bg" fill="none" strokeWidth={RING} />
         <circle

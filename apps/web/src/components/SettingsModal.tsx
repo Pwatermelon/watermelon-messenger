@@ -9,6 +9,7 @@ import { subscribeToPush, unsubscribeFromPush } from "../lib/pushNotifications";
 import { logoutViaYandex } from "../lib/yandexLogout";
 import { formatBirthdayLabel, getBirthdayAge } from "@melon/shared";
 import BirthdayInfoBlock from "./BirthdayInfoBlock";
+import ImageCropModal from "./ImageCropModal";
 
 type Props = {
   onClose: () => void;
@@ -26,6 +27,7 @@ export default function SettingsModal({ onClose }: Props) {
   const [pushLoading, setPushLoading] = useState(false);
   const [birthdayVisible, setBirthdayVisible] = useState(user?.birthdayVisible ?? false);
   const [privacyLoading, setPrivacyLoading] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const yandexLogin = user?.yandexLogin ?? null;
@@ -51,6 +53,10 @@ export default function SettingsModal({ onClose }: Props) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !file.type.startsWith("image/")) return;
+    setCropFile(file);
+  }
+
+  async function uploadAvatar(file: File) {
     setSaving(true);
     setMessage("");
     try {
@@ -127,6 +133,21 @@ export default function SettingsModal({ onClose }: Props) {
   }
 
   return (
+    <>
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          aspect={1}
+          title="Аватар"
+          outputWidth={512}
+          outputHeight={512}
+          onConfirm={(f) => {
+            setCropFile(null);
+            void uploadAvatar(f);
+          }}
+          onCancel={() => setCropFile(null)}
+        />
+      )}
     <div
       className="search-overlay"
       data-testid="settings-modal"
@@ -260,5 +281,6 @@ export default function SettingsModal({ onClose }: Props) {
         </div>
       </div>
     </div>
+    </>
   );
 }

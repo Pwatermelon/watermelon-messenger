@@ -315,6 +315,8 @@ export default function ChatRoom() {
   }
 
   function onMessageTouchStart(e: React.TouchEvent, m: Message) {
+    const target = e.target as HTMLElement;
+    if (target.closest(".voice-player, .circle-player")) return;
     const touch = e.touches[0];
     if (!touch) return;
     longPressRef.current = window.setTimeout(() => {

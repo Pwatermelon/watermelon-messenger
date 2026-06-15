@@ -274,7 +274,7 @@ export default function ChatLayout() {
   }
 
   return (
-    <div className="layout" data-testid="messenger-shell">
+    <div className={`layout${currentChatId ? " layout-chat-open" : ""}`} data-testid="messenger-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
           <h2 className="sidebar-title">
@@ -443,6 +443,7 @@ export default function ChatLayout() {
           onClose={() => setProfileUserId(undefined)}
           onOpenSettings={() => { setProfileUserId(undefined); setSettingsOpen(true); }}
           onAddContact={handleAddContact}
+          onContactChange={() => { if (sidebarTab === "contacts") void loadContacts(); }}
         />
       )}
 

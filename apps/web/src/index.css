@@ -194,6 +194,7 @@ a {
 .layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
 }
 
 .sidebar {
@@ -997,6 +998,30 @@ a {
   gap: 0.4rem;
 }
 
+.message-row.selection-mode {
+  align-items: stretch;
+  margin: 0 -0.35rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 10px;
+}
+
+.message-row.selection-mode.is-selected {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+[data-theme="light"] .message-row.selection-mode.is-selected {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.message-row.selection-mode .message-select-check {
+  align-self: center;
+  margin-bottom: 0;
+}
+
+.message-row.selection-mode .message {
+  align-self: center;
+}
+
 .message-row.incoming {
   justify-content: flex-start;
 }
@@ -1019,6 +1044,11 @@ a {
 
 .message-row-hit:hover {
   background: rgba(127, 127, 127, 0.06);
+}
+
+.message-row.selection-mode .message-row-hit:hover,
+.message-row.selection-mode.is-selected .message-row-hit {
+  background: transparent;
 }
 
 .message-select-check {
@@ -2174,8 +2204,18 @@ a {
 
 .profile-login {
   margin: 0.25rem 0 0;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--muted);
+  font: inherit;
   font-size: 0.95rem;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.profile-login:hover {
+  color: var(--accent);
 }
 
 .profile-photo-open {
@@ -2963,7 +3003,7 @@ a {
   z-index: 2;
   touch-action: none;
   cursor: pointer;
-  pointer-events: none;
+  pointer-events: all;
 }
 
 .circle-player-ring-hit {
@@ -2985,6 +3025,7 @@ a {
 .circle-player-ring-progress {
   stroke: var(--accent);
   transition: stroke-dashoffset 0.05s linear;
+  pointer-events: none;
 }
 
 .message.own .circle-player-ring-progress {
@@ -3468,6 +3509,9 @@ a {
 .voice-player-body {
   flex: 1;
   min-width: 0;
+  touch-action: none;
+  cursor: pointer;
+  padding: 4px 0;
 }
 
 .voice-player-wave {
@@ -3925,13 +3969,109 @@ a {
   cursor: pointer;
   font-size: 0.85rem;
 }
+
+.profile-remove-contact {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.profile-remove-contact:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.image-crop-overlay {
+  z-index: 1100;
+}
+
+.image-crop-modal {
+  max-width: 360px;
+}
+
+.image-crop-hint {
+  margin: 0 1rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.image-crop-viewport {
+  position: relative;
+  margin: 0 auto 0.75rem;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  touch-action: none;
+  cursor: grab;
+}
+
+.image-crop-viewport:active {
+  cursor: grabbing;
+}
+
+.image-crop-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.image-crop-frame {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.image-crop-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 1rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.image-crop-zoom input[type="range"] {
+  width: 100%;
+}
+
+.image-crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 1rem 1rem;
+}
+
 .profile-cover-edit { z-index: 3; }
 
 @media (max-width: 768px) {
-  .layout { flex-direction: column; }
-  .sidebar { width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--border); }
+  .layout { flex-direction: column; height: 100dvh; }
+  .layout:not(.layout-chat-open) .main { display: none; }
+  .layout.layout-chat-open .sidebar { display: none; }
+  .layout.layout-chat-open .main {
+    display: flex;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+  }
+  .sidebar {
+    width: 100%;
+    flex: 1;
+    max-height: none;
+    border-right: none;
+    border-bottom: none;
+  }
   .main { flex: 1; min-height: 0; }
   .profile-overlay .profile-modal { width: 100%; border-radius: 12px 12px 0 0; align-self: flex-end; }
   .record-circle-preview { width: 150px; height: 150px; }
+  .voice-player { max-width: min(280px, 72vw); }
+  .circle-player { transform: scale(0.9); transform-origin: center; }
+  .compose { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+  .chat-header { padding-top: max(0.5rem, env(safe-area-inset-top)); }
 }
 

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useOutletContext } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { getUserById, updateProfile, uploadFile } from "../api";
+import { getUserById, updateProfile, uploadFile, getContacts, addContact, removeContact } from "../api";
 import { mediaUrl as resolveMediaUrl } from "../utils/mediaUrl";
 import { compressImage } from "../utils/imageCompress";
 import type { User } from "@melon/shared";
 import type { ChatLayoutOutletContext } from "./ChatLayout";
 import BirthdayInfoBlock from "../components/BirthdayInfoBlock";
 import ImageLightbox from "../components/ImageLightbox";
+import ImageCropModal from "../components/ImageCropModal";
 
 type ProfileProps = {
   modal?: boolean;
@@ -15,6 +16,7 @@ type ProfileProps = {
   userIdProp?: string;
   onOpenSettings?: () => void;
   onAddContact?: (userId: string) => Promise<void>;
+  onContactChange?: () => void;
 };
 
 function mediaFullUrl(path: string | null | undefined): string | null {
@@ -31,7 +33,7 @@ function buildAvatarPaths(profile: User): string[] {
   return paths;
 }
 
-export default function Profile({ modal, onClose, userIdProp, onOpenSettings, onAddContact }: ProfileProps = {}) {
+export default function Profile({ modal, onClose, userIdProp, onOpenSettings, onAddContact, onContactChange }: ProfileProps = {}) {
   const { userId: routeUserId } = useParams<{ userId?: string }>();
   const userId = userIdProp ?? routeUserId;
   const navigate = useNavigate();
@@ -41,7 +43,9 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
   const { user: me, updateUser } = useAuth();
   const isOwn = !userId || userId === me?.id;
   const targetId = userId ?? me?.id;
-  const [contactAdded, setContactAdded] = useState(false);
+  const [isContact, setIsContact] = useState(false);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [cropFile, setCropFile] = useState<{ file: File; kind: "avatar" | "cover" } | null>(null);
 
   const [profile, setProfile] = useState<User | null>(isOwn && me ? me : null);
   const [loading, setLoading] = useState(!isOwn);
@@ -50,6 +54,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
   const [bio, setBio] = useState(me?.bio ?? "");
   const [avatarLightboxIndex, setAvatarLightboxIndex] = useState<number | null>(null);
   const [photoLightboxIndex, setPhotoLightboxIndex] = useState<number | null>(null);
+  const [loginCopied, setLoginCopied] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +71,50 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
       .then((u) => setProfile(u))
       .finally(() => setLoading(false));
   }, [targetId, isOwn, me]);
+
+  useEffect(() => {
+    setIsContact(false);
+    if (isOwn || !targetId) return;
+    getContacts()
+      .then((list) => setIsContact(list.some((c) => c.id === targetId)))
+      .catch(() => setIsContact(false));
+  }, [targetId, isOwn]);
+
+  async function handleAddContact() {
+    if (!profile) return;
+    setContactBusy(true);
+    try {
+      if (addContactFn) await addContactFn(profile.id);
+      else await addContact(profile.id);
+      setIsContact(true);
+      onContactChange?.();
+    } finally {
+      setContactBusy(false);
+    }
+  }
+
+  async function handleRemoveContact() {
+    if (!profile) return;
+    setContactBusy(true);
+    try {
+      await removeContact(profile.id);
+      setIsContact(false);
+      onContactChange?.();
+    } finally {
+      setContactBusy(false);
+    }
+  }
+
+  async function copyLogin() {
+    if (!profile?.yandexLogin) return;
+    try {
+      await navigator.clipboard.writeText(profile.yandexLogin);
+      setLoginCopied(true);
+      setTimeout(() => setLoginCopied(false), 2000);
+    } catch {
+      setMessage("Не удалось скопировать");
+    }
+  }
 
   async function saveBio() {
     if (!isOwn) return;
@@ -195,7 +244,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
   const photoUrls = photos.map((p) => mediaFullUrl(p)).filter(Boolean) as string[];
 
   const hasToolbarActions =
-    (!isOwn && !!addContactFn && !!profile) || (isOwn && !!openSettings);
+    (!isOwn && !!profile) || (isOwn && !!openSettings);
 
   const body = (
     <div className={`profile-page${modal ? " profile-page-modal" : ""}`}>
@@ -207,15 +256,26 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
           </button>
         )}
         <div className="profile-toolbar-actions">
-          {!isOwn && addContactFn && profile && (
-            <button
-              type="button"
-              className="profile-add-contact"
-              onClick={() => void addContactFn(profile.id).then(() => setContactAdded(true))}
-              disabled={contactAdded}
-            >
-              {contactAdded ? "В контактах" : "В контакты"}
-            </button>
+          {!isOwn && profile && (
+            isContact ? (
+              <button
+                type="button"
+                className="profile-remove-contact"
+                onClick={() => void handleRemoveContact()}
+                disabled={contactBusy}
+              >
+                {contactBusy ? "…" : "Удалить из контактов"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="profile-add-contact"
+                onClick={() => void handleAddContact()}
+                disabled={contactBusy}
+              >
+                {contactBusy ? "…" : "В контакты"}
+              </button>
+            )
           )}
           {isOwn && openSettings && (
             <button type="button" className="profile-settings-link" onClick={openSettings}>
@@ -242,7 +302,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
-                if (f) void uploadCover(f);
+                if (f) setCropFile({ file: f, kind: "cover" });
               }}
             />
             <button type="button" className="profile-cover-edit" onClick={() => coverInputRef.current?.click()} disabled={saving}>
@@ -277,7 +337,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = "";
-                  if (f) void uploadAvatar(f);
+                  if (f) setCropFile({ file: f, kind: "avatar" });
                 }}
               />
               <button
@@ -294,7 +354,9 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
         </div>
         <h1 className="profile-name">{profile.username}</h1>
         {profile.yandexLogin && (
-          <p className="profile-login">{profile.yandexLogin}</p>
+          <button type="button" className="profile-login" onClick={() => void copyLogin()} title="Скопировать логин">
+            {loginCopied ? "Скопировано" : profile.yandexLogin}
+          </button>
         )}
         {profile.birthdayLabel && (
           <BirthdayInfoBlock
@@ -412,9 +474,27 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
     </div>
   );
 
+  const cropModal = cropFile ? (
+    <ImageCropModal
+      file={cropFile.file}
+      aspect={cropFile.kind === "avatar" ? 1 : 4.5}
+      title={cropFile.kind === "avatar" ? "Аватар" : "Обложка"}
+      outputWidth={cropFile.kind === "avatar" ? 512 : 1200}
+      outputHeight={cropFile.kind === "avatar" ? 512 : 267}
+      onConfirm={(f) => {
+        const kind = cropFile.kind;
+        setCropFile(null);
+        void (kind === "avatar" ? uploadAvatar(f) : uploadCover(f));
+      }}
+      onCancel={() => setCropFile(null)}
+    />
+  ) : null;
+
   if (modal && onClose) {
     return (
-      <div
+      <>
+        {cropModal}
+        <div
         className="search-overlay profile-overlay"
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
@@ -425,8 +505,14 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
           {body}
         </div>
       </div>
+      </>
     );
   }
 
-  return body;
+  return (
+    <>
+      {cropModal}
+      {body}
+    </>
+  );
 }
