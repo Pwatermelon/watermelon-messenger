@@ -317,7 +317,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
               maxLength={500}
               rows={4}
             />
-            <button type="button" onClick={() => void saveBio()} disabled={saving}>Сохранить</button>
+            <button type="button" className="btn" onClick={() => void saveBio()} disabled={saving}>Сохранить</button>
           </>
         ) : (
           <p className="profile-bio">{profile.bio?.trim() || "Пользователь пока ничего не написал."}</p>
@@ -340,7 +340,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
                   if (f) void addPhoto(f);
                 }}
               />
-              <button type="button" onClick={() => photoInputRef.current?.click()} disabled={saving || photos.length >= 12}>
+              <button type="button" className="btn btn-secondary" onClick={() => photoInputRef.current?.click()} disabled={saving || photos.length >= 12}>
                 + Добавить
               </button>
             </>
@@ -419,7 +419,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
         <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="profile-modal-close" onClick={onClose} aria-label="Закрыть">
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">
             ×
           </button>
           {body}

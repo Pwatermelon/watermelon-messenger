@@ -29,6 +29,9 @@ export function ForwardMessageModal({ chats, userId, currentChatId, onSelect, on
   return (
     <div className="search-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="search-modal forward-modal" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="modal-close" onClick={onClose} disabled={sending} aria-label="Закрыть">
+          ×
+        </button>
         <h3>Переслать в…</h3>
         <div className="forward-chat-list">
           {list.length === 0 ? (
@@ -58,9 +61,6 @@ export function ForwardMessageModal({ chats, userId, currentChatId, onSelect, on
             })
           )}
         </div>
-        <button type="button" className="close" onClick={onClose} disabled={sending}>
-          Отмена
-        </button>
       </div>
     </div>
   );

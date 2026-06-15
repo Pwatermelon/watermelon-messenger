@@ -22,7 +22,7 @@ export default function ChatRoom() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { openProfile, addContact: addToContacts } = useOutletContext<ChatLayoutOutletContext>();
+  const { openProfile } = useOutletContext<ChatLayoutOutletContext>();
   const { send, ready, status, reconnect, subscribe } = useWebSocketContext();
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -686,7 +686,7 @@ export default function ChatRoom() {
           aria-label="Информация о чате"
         >
           <div className="contact-info-modal" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="contact-info-close" onClick={() => { setContactInfoOpen(false); setSelectedMemberId(null); }} aria-label="Закрыть">×</button>
+            <button type="button" className="modal-close" onClick={() => { setContactInfoOpen(false); setSelectedMemberId(null); }} aria-label="Закрыть">×</button>
             {chat.type === "dm" && otherMember ? (
               <>
                 <div className="contact-info-avatar-wrap">
@@ -726,13 +726,6 @@ export default function ChatRoom() {
                   }}
                 >
                   Открыть профиль
-                </button>
-                <button
-                  type="button"
-                  className="contact-info-profile-btn"
-                  onClick={() => void addToContacts(otherMember.id)}
-                >
-                  В контакты
                 </button>
                 <button
                   type="button"
@@ -783,13 +776,6 @@ export default function ChatRoom() {
                       }}
                     >
                       Открыть профиль
-                    </button>
-                    <button
-                      type="button"
-                      className="contact-info-profile-btn"
-                      onClick={() => void addToContacts(m.id)}
-                    >
-                      В контакты
                     </button>
                         {isGroupAdmin && m.id !== user?.id && (
                       <button
@@ -883,7 +869,7 @@ export default function ChatRoom() {
                         spellCheck={false}
                         autoComplete="off"
                       />
-                      <button type="button" onClick={handleAddGroupMember} disabled={!groupAddLogin.trim()}>
+                      <button type="button" className="btn" onClick={handleAddGroupMember} disabled={!groupAddLogin.trim()}>
                         Добавить
                       </button>
                     </div>

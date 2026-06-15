@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconPlay, IconPause } from "./Icons";
+import { canPlayMediaUrl, mimeFromMediaUrl } from "../utils/mediaMime";
+import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback";
 
 const OUTER = 220;
 const VIDEO = 188;
 const RING = 5;
+const RING_HIT = 18;
 const R = (OUTER - RING) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * R;
-const INNER_HIT = VIDEO / 2 + 2;
 
 type Props = {
   src: string;
@@ -26,32 +28,73 @@ function angleFromPointer(clientX: number, clientY: number, rect: DOMRect): numb
   return angle / (Math.PI * 2);
 }
 
-function onRing(clientX: number, clientY: number, rect: DOMRect): boolean {
-  const x = clientX - rect.left - rect.width / 2;
-  const y = clientY - rect.top - rect.height / 2;
-  const dist = Math.hypot(x, y);
-  return dist >= INNER_HIT && dist <= OUTER / 2;
-}
-
 export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const ringRef = useRef<SVGSVGElement>(null);
   const scrubbingRef = useRef(false);
+  const stopRef = useRef<() => void>(() => {});
 
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(metaDuration ?? 0);
   const [error, setError] = useState(false);
+  const [unsupported, setUnsupported] = useState(false);
 
-  const seekTo = useCallback((pct: number) => {
+  const mime = mimeFromMediaUrl(src, "video");
+
+  const stopPlayback = useCallback(() => {
     const video = videoRef.current;
-    if (!video || !Number.isFinite(video.duration)) return;
-    const t = Math.max(0, Math.min(1, pct)) * video.duration;
-    video.currentTime = t;
-    setProgress(t / video.duration);
-    setCurrent(t);
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    setPlaying(false);
+    setProgress(0);
+    setCurrent(0);
   }, []);
+
+  stopRef.current = stopPlayback;
+
+  const scrubHandlersRef = useRef({
+    onMove: (e: PointerEvent) => {
+      if (!scrubbingRef.current) return;
+      e.preventDefault();
+      const rect = ringRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const video = videoRef.current;
+      if (!video) return;
+      const dur = video.duration;
+      if (!dur || !Number.isFinite(dur)) return;
+      const pct = angleFromPointer(e.clientX, e.clientY, rect);
+      const t = Math.max(0, Math.min(1, pct)) * dur;
+      video.currentTime = t;
+      setProgress(t / dur);
+      setCurrent(t);
+    },
+    onUp: (e: PointerEvent) => {
+      if (!scrubbingRef.current) return;
+      e.preventDefault();
+      scrubHandlersRef.current.onMove(e);
+      scrubbingRef.current = false;
+      document.removeEventListener("pointermove", scrubHandlersRef.current.onMove);
+      document.removeEventListener("pointerup", scrubHandlersRef.current.onUp);
+      document.removeEventListener("pointercancel", scrubHandlersRef.current.onUp);
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      scrubbingRef.current = false;
+      document.removeEventListener("pointermove", scrubHandlersRef.current.onMove);
+      document.removeEventListener("pointerup", scrubHandlersRef.current.onUp);
+      document.removeEventListener("pointercancel", scrubHandlersRef.current.onUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    setUnsupported(!canPlayMediaUrl(src, "video"));
+  }, [src]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -73,61 +116,62 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
       setProgress(0);
       setCurrent(0);
       video.currentTime = 0;
+      releaseMediaPlayback(stopRef.current);
+    };
+    const onVideoError = () => {
+      setError(true);
+      setPlaying(false);
+      releaseMediaPlayback(stopRef.current);
     };
 
     video.addEventListener("timeupdate", onTime);
     video.addEventListener("loadedmetadata", onMeta);
     video.addEventListener("ended", onEnd);
+    video.addEventListener("error", onVideoError);
     return () => {
       video.removeEventListener("timeupdate", onTime);
       video.removeEventListener("loadedmetadata", onMeta);
       video.removeEventListener("ended", onEnd);
+      video.removeEventListener("error", onVideoError);
     };
   }, [src]);
 
   useEffect(() => {
-    setPlaying(false);
-    setProgress(0);
-    setCurrent(0);
+    stopPlayback();
     setError(false);
-  }, [src]);
+    return () => releaseMediaPlayback(stopRef.current);
+  }, [src, stopPlayback]);
 
   function togglePlay() {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || unsupported) return;
     if (playing) {
       video.pause();
       setPlaying(false);
+      releaseMediaPlayback(stopRef.current);
     } else {
       setError(false);
+      claimMediaPlayback(stopRef.current);
+      video.playsInline = true;
       void video.play()
         .then(() => setPlaying(true))
-        .catch(() => setError(true));
+        .catch(() => {
+          setError(true);
+          setPlaying(false);
+          releaseMediaPlayback(stopRef.current);
+        });
     }
   }
 
-  function handleRingPointerDown(e: React.PointerEvent<SVGSVGElement>) {
-    const rect = ringRef.current?.getBoundingClientRect();
-    if (!rect || !onRing(e.clientX, e.clientY, rect)) return;
+  function handleRingPointerDown(e: React.PointerEvent<SVGCircleElement>) {
+    if (unsupported) return;
     e.preventDefault();
+    e.stopPropagation();
     scrubbingRef.current = true;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    seekTo(angleFromPointer(e.clientX, e.clientY, rect));
-  }
-
-  function handleRingPointerMove(e: React.PointerEvent<SVGSVGElement>) {
-    if (!scrubbingRef.current) return;
-    const rect = ringRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    seekTo(angleFromPointer(e.clientX, e.clientY, rect));
-  }
-
-  function handleRingPointerUp(e: React.PointerEvent<SVGSVGElement>) {
-    if (!scrubbingRef.current) return;
-    scrubbingRef.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
+    scrubHandlersRef.current.onMove(e.nativeEvent);
+    document.addEventListener("pointermove", scrubHandlersRef.current.onMove, { passive: false });
+    document.addEventListener("pointerup", scrubHandlersRef.current.onUp, { passive: false });
+    document.addEventListener("pointercancel", scrubHandlersRef.current.onUp, { passive: false });
   }
 
   const offset = CIRCUMFERENCE * (1 - progress);
@@ -135,26 +179,52 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
 
   return (
     <div className="circle-player" style={{ width: OUTER, height: OUTER }}>
+      <button
+        type="button"
+        className="circle-player-video-btn"
+        onClick={togglePlay}
+        disabled={unsupported}
+        aria-label={playing ? "Пауза" : "Воспроизвести"}
+      >
+        <video
+          ref={videoRef}
+          className="circle-player-video"
+          playsInline
+          preload="metadata"
+          muted={false}
+        >
+          <source src={src} type={mime} />
+        </video>
+        <span className={`circle-player-overlay${playing ? " is-playing" : ""}`}>
+          {unsupported ? (
+            <span className="circle-player-error" title="Safari не воспроизводит WebM">!</span>
+          ) : error ? (
+            <span className="circle-player-error">!</span>
+          ) : playing ? (
+            <IconPause size={32} />
+          ) : (
+            <IconPlay size={36} />
+          )}
+        </span>
+      </button>
       <svg
         ref={ringRef}
         className="circle-player-ring"
         width={OUTER}
         height={OUTER}
         viewBox={`0 0 ${OUTER} ${OUTER}`}
-        onPointerDown={handleRingPointerDown}
-        onPointerMove={handleRingPointerMove}
-        onPointerUp={handleRingPointerUp}
-        onPointerCancel={handleRingPointerUp}
         aria-hidden
       >
         <circle
           cx={cx}
           cy={cx}
           r={R}
-          className="circle-player-ring-bg"
+          className="circle-player-ring-hit"
           fill="none"
-          strokeWidth={RING}
+          strokeWidth={RING_HIT}
+          onPointerDown={handleRingPointerDown}
         />
+        <circle cx={cx} cy={cx} r={R} className="circle-player-ring-bg" fill="none" strokeWidth={RING} />
         <circle
           cx={cx}
           cy={cx}
@@ -168,25 +238,8 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
           transform={`rotate(-90 ${cx} ${cx})`}
         />
       </svg>
-      <button
-        type="button"
-        className="circle-player-video-btn"
-        onClick={togglePlay}
-        aria-label={playing ? "Пауза" : "Воспроизвести"}
-      >
-        <video ref={videoRef} className="circle-player-video" src={src} playsInline preload="metadata" />
-        <span className={`circle-player-overlay${playing ? " is-playing" : ""}`}>
-          {error ? (
-            <span className="circle-player-error">!</span>
-          ) : playing ? (
-            <IconPause size={32} />
-          ) : (
-            <IconPlay size={36} />
-          )}
-        </span>
-      </button>
       <span className="circle-player-time">
-        {error ? "Ошибка" : `${formatTime(current)}${duration ? ` / ${formatTime(duration)}` : ""}`}
+        {unsupported ? "WebM" : error ? "Ошибка" : `${formatTime(current)}${duration ? ` / ${formatTime(duration)}` : ""}`}
       </span>
     </div>
   );

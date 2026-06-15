@@ -47,7 +47,6 @@ export default function ChatLayout() {
   const [contacts, setContacts] = useState<User[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [profileUserId, setProfileUserId] = useState<string | null | undefined>(undefined);
-  const [dmPickContact, setDmPickContact] = useState(false);
   const newChatMenuRef = useRef<HTMLDivElement>(null);
 
   function openProfile(userId?: string) {
@@ -70,6 +69,10 @@ export default function ChatLayout() {
   useEffect(() => {
     if (sidebarTab === "contacts") loadContacts();
   }, [sidebarTab]);
+
+  useEffect(() => {
+    if (dmOpen) loadContacts();
+  }, [dmOpen]);
 
   useEffect(() => {
     const state = location.state as { openSettings?: boolean } | null;
@@ -446,58 +449,63 @@ export default function ChatLayout() {
       {dmOpen && (
         <div
           className="search-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) { setDmOpen(false); setDmUser(null); setDmError(""); setDmPickContact(false); } }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setDmOpen(false); setDmUser(null); setDmError(""); } }}
         >
-          <div className="search-modal search-modal-wide" onClick={(e) => e.stopPropagation()}>
+          <div className="search-modal search-modal-wide dm-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              aria-label="Закрыть"
+              onClick={() => { setDmOpen(false); setDmUser(null); setDmError(""); }}
+            >
+              ×
+            </button>
             <h3>Новый диалог</h3>
-            <div className="dm-modal-tabs">
-              <button type="button" className={!dmPickContact ? "active" : ""} onClick={() => setDmPickContact(false)}>Поиск</button>
-              <button type="button" className={dmPickContact ? "active" : ""} onClick={() => { setDmPickContact(true); loadContacts(); }}>Контакты</button>
-            </div>
-            {!dmPickContact ? (
-            <>
-            <div className="search-id-row">
-              <input
-                type="text"
-                data-testid="dm-user-id-input"
-                placeholder="Логин"
-                value={dmLogin}
-                onChange={(e) => { setDmLogin(e.target.value); setDmError(""); }}
-                onKeyDown={(e) => e.key === "Enter" && lookupDmUser()}
-                autoFocus
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button type="button" data-testid="dm-lookup-btn" onClick={lookupDmUser} disabled={dmLoading || !dmLogin.trim()}>
-                {dmLoading ? "…" : "Найти"}
-              </button>
-            </div>
-            {dmError && <p className="search-error">{dmError}</p>}
-            {dmUser && (
-              <div className="search-result-single">
-                <div className="avatar">{dmUser.avatarUrl ? (
-                  <img src={mediaUrl(dmUser.avatarUrl)} alt="" />
-                ) : userAvatarLetter(dmUser)}</div>
-                <div className="search-result-user-text">
-                  <span className="search-result-name">{userDisplayName(dmUser)}</span>
-                  {dmUser.yandexLogin && dmUser.yandexLogin.toLowerCase() !== dmUser.username?.toLowerCase() && (
-                    <span className="search-result-login">{dmUser.yandexLogin}</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  data-testid="dm-start-btn"
-                  onClick={(e) => { e.stopPropagation(); startDm(dmUser.id); }}
-                >
-                  Написать
+            <div className="dm-modal-body">
+              <div className="search-id-row">
+                <input
+                  type="text"
+                  data-testid="dm-user-id-input"
+                  placeholder="Логин"
+                  value={dmLogin}
+                  onChange={(e) => { setDmLogin(e.target.value); setDmError(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && lookupDmUser()}
+                  autoFocus
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <button type="button" className="btn" data-testid="dm-lookup-btn" onClick={lookupDmUser} disabled={dmLoading || !dmLogin.trim()}>
+                  {dmLoading ? "…" : "Найти"}
                 </button>
               </div>
-            )}
-            </>
-            ) : (
+              {dmError && <p className="search-error">{dmError}</p>}
+              {dmUser && (
+                <div className="search-result-single">
+                  <div className="avatar">{dmUser.avatarUrl ? (
+                    <img src={mediaUrl(dmUser.avatarUrl)} alt="" />
+                  ) : userAvatarLetter(dmUser)}</div>
+                  <div className="search-result-user-text">
+                    <span className="search-result-name">{userDisplayName(dmUser)}</span>
+                    {dmUser.yandexLogin && dmUser.yandexLogin.toLowerCase() !== dmUser.username?.toLowerCase() && (
+                      <span className="search-result-login">{dmUser.yandexLogin}</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    data-testid="dm-start-btn"
+                    onClick={(e) => { e.stopPropagation(); startDm(dmUser.id); }}
+                  >
+                    Написать
+                  </button>
+                </div>
+              )}
+
+              <p className="dm-contacts-label">Контакты</p>
               <div className="dm-contacts-list">
-                {contacts.length === 0 ? (
+                {contactsLoading ? (
+                  <p className="search-hint">Загрузка…</p>
+                ) : contacts.length === 0 ? (
                   <p className="search-hint">Нет контактов — добавьте из профиля</p>
                 ) : (
                   contacts.map((c) => (
@@ -512,10 +520,7 @@ export default function ChatLayout() {
                   ))
                 )}
               </div>
-            )}
-            <button type="button" className="close" onClick={() => { setDmOpen(false); setDmUser(null); setDmError(""); setDmPickContact(false); }}>
-              Закрыть
-            </button>
+            </div>
           </div>
         </div>
       )}
@@ -526,6 +531,9 @@ export default function ChatLayout() {
           onClick={(e) => { if (e.target === e.currentTarget) setGroupOpen(false); }}
         >
           <div className="search-modal" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="modal-close" aria-label="Закрыть" onClick={() => setGroupOpen(false)}>
+              ×
+            </button>
             <h3>Новая группа</h3>
             <input
               type="text"
@@ -545,7 +553,7 @@ export default function ChatLayout() {
                 spellCheck={false}
                 autoComplete="off"
               />
-              <button type="button" onClick={addGroupMemberByLogin} disabled={!groupAddLogin.trim()}>
+              <button type="button" className="btn" onClick={addGroupMemberByLogin} disabled={!groupAddLogin.trim()}>
                 Добавить
               </button>
             </div>
@@ -564,14 +572,11 @@ export default function ChatLayout() {
             <div className="modal-actions" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
-                className="close primary"
+                className="close btn"
                 onClick={(e) => { e.stopPropagation(); startGroup(); }}
                 disabled={!groupName.trim()}
               >
                 Создать группу
-              </button>
-              <button type="button" className="close" onClick={() => setGroupOpen(false)}>
-                Отмена
               </button>
             </div>
           </div>

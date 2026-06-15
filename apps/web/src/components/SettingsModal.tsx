@@ -135,7 +135,7 @@ export default function SettingsModal({ onClose }: Props) {
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
           <h2>Настройки</h2>
-          <button type="button" className="settings-modal-close" onClick={onClose} aria-label="Закрыть">
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">
             ×
           </button>
         </div>
@@ -165,6 +165,7 @@ export default function SettingsModal({ onClose }: Props) {
                 />
                 <button
                   type="button"
+                  className="btn btn-secondary"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={saving}
                 >
@@ -181,7 +182,7 @@ export default function SettingsModal({ onClose }: Props) {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Ваше имя"
               />
-              <button type="button" onClick={handleSaveProfile} disabled={saving || !username.trim()}>
+              <button type="button" className="btn" onClick={handleSaveProfile} disabled={saving || !username.trim()}>
                 Сохранить имя
               </button>
             </div>
@@ -221,7 +222,7 @@ export default function SettingsModal({ onClose }: Props) {
           </div>
           <div className="settings-section">
             <h3>Уведомления</h3>
-            <button type="button" onClick={() => void togglePush()} disabled={pushLoading}>
+            <button type="button" className="btn btn-secondary" onClick={() => void togglePush()} disabled={pushLoading}>
               {pushLoading ? "…" : pushEnabled ? "Push: вкл" : "Push: выкл"}
             </button>
           </div>

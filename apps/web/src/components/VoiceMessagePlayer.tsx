@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IconPlay, IconPause } from "./Icons";
+import { canPlayMediaUrl, mimeFromMediaUrl } from "../utils/mediaMime";
+import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback";
 
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -10,10 +11,31 @@ function formatTime(sec: number): string {
 
 export function VoiceMessagePlayer({ src, duration: metaDuration }: { src: string; duration?: number }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const stopRef = useRef<() => void>(() => {});
+
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(metaDuration ?? 0);
   const [error, setError] = useState(false);
+  const [unsupported, setUnsupported] = useState(false);
+
+  const mime = mimeFromMediaUrl(src, "audio");
+
+  const stopPlayback = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setPlaying(false);
+    setProgress(0);
+  }, []);
+
+  stopRef.current = stopPlayback;
+
+  useEffect(() => {
+    setUnsupported(!canPlayMediaUrl(src, "audio"));
+  }, [src]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -31,46 +53,65 @@ export function VoiceMessagePlayer({ src, duration: metaDuration }: { src: strin
     const onEnd = () => {
       setPlaying(false);
       setProgress(0);
+      releaseMediaPlayback(stopRef.current);
+    };
+    const onAudioError = () => {
+      setError(true);
+      setPlaying(false);
+      releaseMediaPlayback(stopRef.current);
     };
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("ended", onEnd);
+    audio.addEventListener("error", onAudioError);
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("ended", onEnd);
+      audio.removeEventListener("error", onAudioError);
     };
   }, [src]);
 
   useEffect(() => {
+    stopPlayback();
     setError(false);
-    setPlaying(false);
-    setProgress(0);
-  }, [src]);
+    return () => releaseMediaPlayback(stopRef.current);
+  }, [src, stopPlayback]);
 
   function toggle() {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || unsupported) return;
     if (playing) {
       audio.pause();
       setPlaying(false);
+      releaseMediaPlayback(stopRef.current);
     } else {
       setError(false);
+      claimMediaPlayback(stopRef.current);
       void audio.play()
         .then(() => setPlaying(true))
-        .catch(() => setError(true));
+        .catch(() => {
+          setError(true);
+          setPlaying(false);
+          releaseMediaPlayback(stopRef.current);
+        });
     }
   }
 
-  const bars = Array.from({ length: 28 }, (_, i) => {
-    const h = 4 + ((i * 7 + 3) % 11);
-    return h;
-  });
+  const bars = Array.from({ length: 28 }, (_, i) => 4 + ((i * 7 + 3) % 11));
 
   return (
     <div className="voice-player">
-      <audio ref={audioRef} src={src} preload="auto" />
-      <button type="button" className="voice-player-btn" onClick={toggle} aria-label={playing ? "Пауза" : "Воспроизвести"}>
+      <audio ref={audioRef} preload="metadata">
+        <source src={src} type={mime} />
+      </audio>
+      <button
+        type="button"
+        className="voice-player-btn"
+        onClick={toggle}
+        disabled={unsupported}
+        aria-label={playing ? "Пауза" : "Воспроизвести"}
+      >
         {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
       </button>
       <div className="voice-player-body">
@@ -87,7 +128,9 @@ export function VoiceMessagePlayer({ src, duration: metaDuration }: { src: strin
           <div className="voice-player-fill" style={{ width: `${progress * 100}%` }} />
         </div>
       </div>
-      <span className="voice-player-time">{error ? "Ошибка" : formatTime(duration)}</span>
+      <span className="voice-player-time">
+        {unsupported ? "WebM" : error ? "Ошибка" : formatTime(duration)}
+      </span>
     </div>
   );
 }

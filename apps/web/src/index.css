@@ -41,8 +41,7 @@
   background: rgba(0,0,0,0.05);
 }
 
-[data-theme="light"] .contact-info-close:hover,
-[data-theme="light"] .profile-modal-close:hover,
+[data-theme="light"] .modal-close:hover,
 [data-theme="light"] .sidebar-settings-btn:hover {
   background: rgba(0,0,0,0.08);
 }
@@ -69,6 +68,46 @@ input, button, textarea {
 
 button {
   cursor: pointer;
+}
+
+/* Shared buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-elevated);
+}
+
+[data-theme="light"] .btn-secondary:hover:not(:disabled) {
+  background: #f0eeeb;
 }
 
 a {
@@ -312,8 +351,8 @@ a {
   padding: 0.45rem 0.5rem;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--surface);
-  color: inherit;
+  background: var(--bg);
+  color: var(--text);
   text-decoration: none;
   font-size: 0.85rem;
   cursor: pointer;
@@ -666,26 +705,11 @@ a {
   position: relative;
 }
 
-.contact-info-close {
+.contact-info-modal > .modal-close {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 50%;
-  background: var(--border);
-  color: var(--text);
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.contact-info-close:hover {
-  background: rgba(255,255,255,0.15);
+  z-index: 2;
 }
 
 .contact-info-back {
@@ -746,6 +770,52 @@ a {
   font-size: 1.25rem;
   font-weight: 600;
   text-align: center;
+}
+
+.contact-info-group-avatar-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.contact-info-group-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.contact-info-group-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contact-info-group-avatar-change {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.contact-info-group-avatar-change:hover {
+  background: var(--surface-elevated);
+}
+
+.contact-info-group-avatar-change:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .contact-info-group-title {
@@ -1224,26 +1294,6 @@ a {
   font-size: 1.15rem;
 }
 
-.settings-modal-close {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.settings-modal-close:hover {
-  background: var(--border);
-  color: var(--text);
-}
-
 .settings-modal-body {
   overflow-y: auto;
   padding: 1rem 1.25rem 1.25rem;
@@ -1288,7 +1338,7 @@ a {
   gap: 0.85rem;
   margin: 1rem 0 0;
   padding: 0.85rem 1rem;
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -1336,8 +1386,9 @@ a {
 }
 
 .contact-info-modal .profile-info-block {
-  margin-left: 1rem;
-  margin-right: 1rem;
+  margin: 0.75rem 0 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
 }
 
 .settings-page h1 {
@@ -1544,6 +1595,7 @@ a {
 }
 
 .search-modal {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1557,8 +1609,41 @@ a {
 
 .search-modal h3 {
   margin: 0;
-  padding: 1rem;
+  padding: 1rem 2.75rem 1rem 1rem;
   border-bottom: 1px solid var(--border);
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.modal-close:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.search-modal > .modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
 }
 
 .search-modal input {
@@ -1628,6 +1713,14 @@ a {
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+}
+
+.search-id-row .btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .search-id-row button:disabled {
@@ -1669,14 +1762,44 @@ a {
   object-fit: cover;
 }
 
+.search-result-single .btn,
 .search-result-single .btn-primary {
   margin-left: auto;
-  padding: 0.4rem 0.75rem;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.search-modal-wide {
+  max-width: 420px;
+}
+
+.dm-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 0.25rem;
+}
+
+.dm-contacts-label {
+  margin: 1rem 1rem 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.dm-contacts-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0 0.5rem 0.5rem;
+}
+
+.dm-contact-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="light"] .dm-contact-item:hover {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .group-selected {
@@ -1716,19 +1839,29 @@ a {
   margin: 0.75rem 1rem;
 }
 
-.modal-actions .close.primary {
-  background: var(--accent);
-  color: #fff;
+.modal-actions .close.btn {
+  flex: 1;
 }
 
 .search-modal .close {
-  margin: 0.75rem 1rem;
+  margin: 0.75rem 1rem 1rem;
   padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+}
+
+.search-modal .close.btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.search-modal .close:not(.btn):not(.btn-secondary) {
   background: var(--border);
   border: none;
-  border-radius: 8px;
   color: var(--text);
-  cursor: pointer;
 }
 
 .link-button {
@@ -2059,8 +2192,8 @@ a {
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
-  color: inherit;
+  background: var(--bg);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.85rem;
 }
@@ -2827,8 +2960,21 @@ a {
 .circle-player-ring {
   position: absolute;
   inset: 0;
+  z-index: 2;
   touch-action: none;
   cursor: pointer;
+  pointer-events: none;
+}
+
+.circle-player-ring-hit {
+  stroke: transparent;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.circle-player-ring-bg,
+.circle-player-ring-progress {
+  pointer-events: none;
 }
 
 .circle-player-ring-bg {
@@ -2850,6 +2996,7 @@ a {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  z-index: 1;
   width: 188px;
   height: 188px;
   border-radius: 50%;
@@ -2882,6 +3029,7 @@ a {
 
 .circle-player-overlay.is-playing {
   opacity: 0;
+  pointer-events: none;
 }
 
 .circle-player-video-btn:hover .circle-player-overlay.is-playing,
@@ -3211,13 +3359,18 @@ a {
 
 .contact-info-profile-btn {
   width: 100%;
-  margin: 0.75rem 0;
+  margin: 0.75rem 0 0;
   padding: 0.65rem;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
-  background: var(--surface);
-  color: inherit;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
   cursor: pointer;
+}
+
+.contact-info-profile-btn:hover {
+  background: var(--accent-hover);
 }
 
 .platinum-expires {
@@ -3601,6 +3754,9 @@ a {
   align-items: center;
   justify-content: center;
   border-radius: 50% !important;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .compose-btn-recording {
@@ -3728,12 +3884,6 @@ a {
   font: inherit;
 }
 
-.dm-modal-tabs { display: flex; gap: 0.35rem; padding: 0 1rem 0.75rem; }
-.dm-modal-tabs button { flex: 1; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; }
-.dm-modal-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.dm-contacts-list { max-height: 280px; overflow-y: auto; padding: 0 0.5rem; }
-.dm-contact-item:hover { background: rgba(255,255,255,0.06); }
-
 .profile-overlay .profile-modal {
   position: relative;
   width: min(720px, 96vw);
@@ -3744,28 +3894,11 @@ a {
   border-radius: var(--radius);
 }
 
-.profile-modal-close {
+.profile-overlay .profile-modal > .modal-close {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   z-index: 10;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.profile-modal-close:hover {
-  background: var(--border);
-  color: var(--text);
 }
 
 .profile-page-modal {
@@ -3787,7 +3920,8 @@ a {
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--bg);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.85rem;
 }
