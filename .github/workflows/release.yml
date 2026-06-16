@@ -197,6 +197,10 @@ jobs:
             "${REMOTE}/deploy/"
 
           rsync -avz -e "$RSYNC_SSH" \
+            deploy/monitoring/ \
+            "${REMOTE}/deploy/monitoring/"
+
+          rsync -avz -e "$RSYNC_SSH" \
             scripts/deploy-server.sh \
             scripts/certbot-init.sh \
             scripts/backup-postgres.sh \

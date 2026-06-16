@@ -22,6 +22,10 @@ rsync -avz -e "$RSYNC_SSH" \
   "${REMOTE}/deploy/"
 
 rsync -avz -e "$RSYNC_SSH" \
+  "${ROOT}/deploy/monitoring/" \
+  "${REMOTE}/deploy/monitoring/"
+
+rsync -avz -e "$RSYNC_SSH" \
   "${ROOT}/scripts/"*.sh \
   "${REMOTE}/scripts/"
 

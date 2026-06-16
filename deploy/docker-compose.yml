@@ -138,7 +138,7 @@ services:
     image: prom/prometheus:v2.55.1
     restart: always
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus:/etc/prometheus:ro
       - promdata:/prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml

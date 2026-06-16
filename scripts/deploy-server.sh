@@ -106,6 +106,32 @@ else
 fi
 export WM_VERSION="${VERSION}"
 
+# Docker creates directories when bind-mount source files are missing — remove before up.
+fix_monitoring_mounts() {
+  local base="${ROOT}/deploy/monitoring"
+  local paths=(
+    "prometheus/prometheus.yml"
+    "grafana/grafana.ini"
+  )
+  for rel in "${paths[@]}"; do
+    local p="${base}/${rel}"
+    if [[ -d "${p}" ]]; then
+      echo "WARN: removing erroneous directory ${p} (file was missing on a prior deploy)"
+      rm -rf "${p}"
+    fi
+  done
+  if [[ ! -f "${base}/prometheus/prometheus.yml" ]]; then
+    echo "ERROR: missing ${base}/prometheus/prometheus.yml — sync deploy/monitoring/ to the server"
+    exit 1
+  fi
+  if [[ ! -f "${base}/grafana/grafana.ini" ]]; then
+    echo "ERROR: missing ${base}/grafana/grafana.ini — sync deploy/monitoring/ to the server"
+    exit 1
+  fi
+}
+
+fix_monitoring_mounts
+
 if cert_exists; then
   set_nginx_conf "nginx.prod.conf"
 else
