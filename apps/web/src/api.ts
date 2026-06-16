@@ -300,7 +300,7 @@ export interface MessageItem {
   attachmentMetadata?: AttachmentMetadata | null;
 }
 
-export type ReadCursor = { userId: string; lastReadMessageId: string };
+export type ReadCursor = { userId: string; lastReadMessageId: string; updatedAt?: string };
 
 export async function markChatReadApi(chatId: string, messageId: string): Promise<void> {
   const normalized = messageId.trim().toLowerCase();

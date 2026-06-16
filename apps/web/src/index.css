@@ -1334,6 +1334,13 @@ a {
   font-weight: 500;
 }
 
+.chat-info-voice-item .voice-player {
+  width: 100%;
+  max-width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .chat-info-member-role {
   display: inline-block;
   margin-left: 0.35rem;
@@ -1548,7 +1555,7 @@ a {
   pointer-events: none;
 }
 
-.messages-history-overlay .messages-load-older-spinner {
+.messages-history-overlay .messages-history-overlay-chip {
   position: absolute;
   top: 4px;
   left: 50%;
@@ -1560,7 +1567,7 @@ a {
 }
 
 .messages-load-older-spinner {
-  display: inline-block;
+  display: block;
   width: 22px;
   height: 22px;
   border: 2px solid var(--border);
@@ -3843,9 +3850,16 @@ a {
 
 .message-voice {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
   margin: 0.25rem 0;
+  min-width: 0;
+  max-width: min(320px, 100%);
+}
+
+.message.own.message-voice {
+  align-items: flex-end;
 }
 
 .message-voice audio {
@@ -5214,21 +5228,24 @@ a {
   width: min(280px, 100%);
   max-width: 100%;
   padding: 0.35rem 0.5rem;
-  margin: 0.25rem 0;
-  flex-wrap: wrap;
+  margin: 0;
+  flex-wrap: nowrap;
+  box-sizing: border-box;
 }
 
 .voice-player-time {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-  width: 100%;
-  text-align: right;
-  margin-top: 0.1rem;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .voice-player-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 36px;
   height: 36px;
   border: none;
@@ -5241,10 +5258,11 @@ a {
 
 .voice-player-body {
   flex: 1;
-  min-width: 0;
+  min-width: 72px;
   touch-action: none;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 2px 0;
+  overflow: hidden;
 }
 
 .voice-player-wave {
@@ -5604,6 +5622,11 @@ a {
   width: 100%;
   max-width: min(320px, 100%);
   min-width: 0;
+}
+
+.message.message-naked.message-voice .voice-player {
+  width: 100%;
+  max-width: 100%;
 }
 
 .message.message-naked.message-voice .message-meta {

@@ -9,6 +9,7 @@ import { eq, and } from "drizzle-orm";
 import * as scylla from "./services/scylla";
 import * as redis from "./services/redis";
 import { notifyChatMembersExcept } from "./services/chatNotifications";
+import { grantMediaFromAttachment } from "./services/mediaAccess";
 import { trackMessageCreated } from "./services/prometheus";
 import { advanceReadCursor } from "./services/chatRead";
 import { incrementUnreadForChat } from "./services/chatUnread";
@@ -209,7 +210,11 @@ export const wsHandlers = {
               attachmentMetadata: attachmentMetadata ?? null,
             }
           );
-          await grantMediaFromAttachment(attachmentUrl, chatId, attachmentMetadata ?? null);
+          try {
+            await grantMediaFromAttachment(attachmentUrl, chatId, attachmentMetadata ?? null);
+          } catch (err) {
+            console.warn("[WS] grantMediaFromAttachment failed:", err);
+          }
           const mt = messageType ?? "text";
           if (mt !== "system") {
             trackMessageCreated();
@@ -283,7 +288,7 @@ export const wsHandlers = {
           send(ws, { type: "error", error: "Not a member of this chat" });
           return;
         }
-        const { advanced, messageId: resolvedId } = await advanceReadCursor(
+        const { advanced, messageId: resolvedId, updatedAt } = await advanceReadCursor(
           chatId,
           ws.data.userId,
           messageId
@@ -294,6 +299,7 @@ export const wsHandlers = {
             chatId,
             userId: ws.data.userId,
             messageId: resolvedId,
+            updatedAt: updatedAt ?? new Date().toISOString(),
           });
         }
       }

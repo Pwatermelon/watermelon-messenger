@@ -6,18 +6,18 @@ export async function advanceReadCursor(
   chatId: string,
   userId: string,
   messageId?: string | null
-): Promise<{ advanced: boolean; messageId: string | null }> {
+): Promise<{ advanced: boolean; messageId: string | null; updatedAt: string | null }> {
   const target = messageId?.trim().toLowerCase() || null;
   if (!target) {
-    return { advanced: false, messageId: null };
+    return { advanced: false, messageId: null, updatedAt: null };
   }
   const row = await scyllaGetMessage(chatId, target);
   if (!row) {
-    return { advanced: false, messageId: null };
+    return { advanced: false, messageId: null, updatedAt: null };
   }
-  const advanced = await upsertReadCursor(chatId, userId, target);
+  const { advanced, updatedAt } = await upsertReadCursor(chatId, userId, target);
   if (advanced) {
     await resetUnreadCount(chatId, userId);
   }
-  return { advanced, messageId: target };
+  return { advanced, messageId: target, updatedAt };
 }

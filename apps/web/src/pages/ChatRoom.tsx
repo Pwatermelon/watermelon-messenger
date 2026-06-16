@@ -100,7 +100,9 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const selectionMode = selectedIds.size > 0;
   const [readCursors, setReadCursors] = useState<Record<string, string>>({});
+  const [readCursorTimes, setReadCursorTimes] = useState<Record<string, string>>({});
   const readCursorsRef = useRef<Record<string, string>>({});
+  const readCursorTimesRef = useRef<Record<string, string>>({});
   const messagesRef = useRef<Message[]>([]);
   const hasMoreOlderRef = useRef(true);
   const loadingOlderRef = useRef(false);
@@ -112,6 +114,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   const [prependTick, setPrependTick] = useState(0);
   const [reloadNonce, setReloadNonce] = useState(0);
   const lastMarkedReadRef = useRef<string | null>(null);
+  const lastMarkedReadChatIdRef = useRef<string | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -123,12 +126,19 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     loadingRef.current = loading;
   }, [loading]);
 
-  function applyReadCursors(rows: { userId: string; lastReadMessageId: string }[]) {
+  function applyReadCursors(rows: { userId: string; lastReadMessageId: string; updatedAt?: string }[]) {
     const map = Object.fromEntries(
       rows.map((r) => [r.userId.toLowerCase(), r.lastReadMessageId.trim().toLowerCase()])
     );
+    const times = Object.fromEntries(
+      rows
+        .filter((r) => r.updatedAt)
+        .map((r) => [r.userId.toLowerCase(), r.updatedAt as string])
+    );
     readCursorsRef.current = map;
+    readCursorTimesRef.current = times;
     setReadCursors(map);
+    setReadCursorTimes(times);
   }
 
   function canMarkReadNow(): boolean {
@@ -143,14 +153,18 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }
 
   function markChatRead(messageId: string) {
-    if (!chatId || !user?.id || !canMarkReadNow()) return;
+    if (!chatId || !user?.id || !canMarkReadNow() || pendingInitialScrollRef.current) return;
     const normalized = messageId.toLowerCase();
     if (!isMessageSeenForRead(normalized)) return;
     const mine = readCursorsRef.current[user.id.toLowerCase()] ?? readCursorsRef.current[user.id];
     if (mine && compareMessageId(mine, normalized) >= 0) return;
     readCursorsRef.current[user.id.toLowerCase()] = normalized;
     setReadCursors((prev) => ({ ...prev, [user.id.toLowerCase()]: normalized }));
+    const markedAt = new Date().toISOString();
+    readCursorTimesRef.current[user.id.toLowerCase()] = markedAt;
+    setReadCursorTimes((prev) => ({ ...prev, [user.id.toLowerCase()]: markedAt }));
     lastMarkedReadRef.current = normalized;
+    lastMarkedReadChatIdRef.current = chatId;
     if (ready) {
       send({ type: "mark_read", chatId, messageId: normalized });
     }
@@ -173,13 +187,27 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }
 
   function getPeerReaders(m: Message) {
-    if (m.senderId !== user?.id) return [];
-    return getMessageReaders(m.id, m.senderId, chat?.members ?? [], readCursors);
+    if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return [];
+    return getMessageReaders(
+      m.id,
+      m.senderId,
+      chat?.members ?? [],
+      readCursors,
+      readCursorTimes,
+      m.createdAt
+    );
   }
 
   function isMessageReadByPeers(m: Message): boolean {
-    if (m.senderId !== user?.id) return false;
-    return isMessageReadByAnyPeer(m.id, m.senderId, chat?.members ?? [], readCursors);
+    if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return false;
+    return isMessageReadByAnyPeer(
+      m.id,
+      m.senderId,
+      chat?.members ?? [],
+      readCursors,
+      readCursorTimes,
+      m.createdAt
+    );
   }
 
   useEffect(() => {
@@ -210,6 +238,10 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     setSelectedIds(new Set());
     setReadCursors({});
     readCursorsRef.current = {};
+    setReadCursorTimes({});
+    readCursorTimesRef.current = {};
+    lastMarkedReadRef.current = null;
+    lastMarkedReadChatIdRef.current = null;
     setReplyDraft(null);
     setEditDraft(null);
     stickToBottomRef.current = true;
@@ -302,6 +334,11 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }, [chatId, user?.id]);
 
   useEffect(() => {
+    if (!chatId || !ready) return;
+    send({ type: "subscribe", chatId });
+  }, [chatId, ready, send]);
+
+  useEffect(() => {
     return subscribe((msg) => {
       if (msg.type === "message" && msg.message.chatId === chatId) {
         const incoming = msg.message;
@@ -343,13 +380,15 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
       if (msg.type === "read_receipt" && msg.chatId === chatId) {
         const incomingId = msg.messageId.toLowerCase();
         const userKey = msg.userId.toLowerCase();
-        setReadCursors((prev) => {
-          const cur = prev[userKey] ?? prev[msg.userId];
-          if (cur && compareMessageId(cur, incomingId) >= 0) return prev;
-          const next = { ...prev, [userKey]: incomingId };
-          readCursorsRef.current = next;
-          return next;
-        });
+        const updatedAt = msg.updatedAt ?? new Date().toISOString();
+        const cur = readCursorsRef.current[userKey] ?? readCursorsRef.current[msg.userId];
+        if (cur && compareMessageId(cur, incomingId) >= 0) return;
+        const nextCursors = { ...readCursorsRef.current, [userKey]: incomingId };
+        const nextTimes = { ...readCursorTimesRef.current, [userKey]: updatedAt };
+        readCursorsRef.current = nextCursors;
+        readCursorTimesRef.current = nextTimes;
+        setReadCursors(nextCursors);
+        setReadCursorTimes(nextTimes);
       }
       if (msg.type === "reaction" && msg.chatId === chatId) {
         setMessages((prev) =>
@@ -550,7 +589,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     return () => {
       const id = chatId;
       const lastRead = lastMarkedReadRef.current;
-      if (!id || !lastRead) return;
+      if (!id || !lastRead || lastMarkedReadChatIdRef.current !== id) return;
       void markChatReadApi(id, lastRead).catch(() => {});
     };
   }, [chatId]);
@@ -1314,7 +1353,9 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
             <div ref={topSentinelRef} className="messages-top-sentinel" aria-hidden />
             {loadingOlder && (
               <div className="messages-history-overlay" aria-busy="true" aria-label="Загрузка истории">
-                <span className="messages-load-older-spinner" />
+                <div className="messages-history-overlay-chip">
+                  <span className="messages-load-older-spinner" />
+                </div>
               </div>
             )}
             {messages.map((m, msgIndex) => {
@@ -1479,7 +1520,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
                     }
                     aria-label="Прочитано"
                   >
-                    🍉{chat?.type === "group" && peerReaders.length > 1 ? ` ${peerReaders.length}` : ""}
+                    🍉
                   </span>
                 )}
               </div>

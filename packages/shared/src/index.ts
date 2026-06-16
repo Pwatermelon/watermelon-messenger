@@ -129,7 +129,7 @@ export type WSServerMessage =
   | { type: "message_deleted"; chatId: string; messageId: string }
   | { type: "chat_removed"; chatId: string }
   | { type: "chat_members_changed"; chatId: string }
-  | { type: "read_receipt"; chatId: string; userId: string; messageId: string }
+  | { type: "read_receipt"; chatId: string; userId: string; messageId: string; updatedAt?: string }
   | { type: "reaction"; chatId: string; messageId: string; reactions: MessageReaction[] }
   | { type: "typing"; chatId: string; userId: string; isTyping: boolean }
   | { type: "presence"; userId: string; online: boolean }

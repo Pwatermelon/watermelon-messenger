@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 
-export type ReadCursorRow = { userId: string; lastReadMessageId: string };
+export type ReadCursorRow = { userId: string; lastReadMessageId: string; updatedAt: string };
 
 function rowsFromExecute<T>(result: unknown): T[] {
   const rows = (result as { rows?: T[] }).rows ?? result;
@@ -18,22 +18,30 @@ function isNewerMessageId(a: string, b: string): boolean {
 }
 
 export async function getReadCursors(chatId: string): Promise<ReadCursorRow[]> {
-  const result = await db.execute<{ user_id: string; last_read_message_id: string }>(sql`
-    SELECT user_id, last_read_message_id FROM chat_read_cursors WHERE chat_id = ${chatId}::uuid
+  const result = await db.execute<{
+    user_id: string;
+    last_read_message_id: string;
+    updated_at: Date | string;
+  }>(sql`
+    SELECT user_id, last_read_message_id, updated_at FROM chat_read_cursors WHERE chat_id = ${chatId}::uuid
   `);
   const list = rowsFromExecute(result);
   return list.map((r) => ({
     userId: String(r.user_id).toLowerCase(),
     lastReadMessageId: String(r.last_read_message_id).trim().toLowerCase(),
+    updatedAt:
+      r.updated_at instanceof Date
+        ? r.updated_at.toISOString()
+        : new Date(String(r.updated_at)).toISOString(),
   }));
 }
 
-/** Returns true if cursor was advanced (caller should broadcast). */
+/** Returns whether cursor was advanced and its timestamp (caller should broadcast). */
 export async function upsertReadCursor(
   chatId: string,
   userId: string,
   messageId: string
-): Promise<boolean> {
+): Promise<{ advanced: boolean; updatedAt: string | null }> {
   const normalized = normalizeMessageId(messageId);
   const existing = await db.execute<{ last_read_message_id: string }>(sql`
     SELECT last_read_message_id FROM chat_read_cursors
@@ -42,16 +50,19 @@ export async function upsertReadCursor(
   `);
   const rows = rowsFromExecute(existing);
   const prev = rows[0] ? String(rows[0].last_read_message_id) : null;
-  if (prev && !isNewerMessageId(normalized, prev)) return false;
+  if (prev && !isNewerMessageId(normalized, prev)) {
+    return { advanced: false, updatedAt: null };
+  }
 
+  const updatedAt = new Date().toISOString();
   await db.execute(sql`
     INSERT INTO chat_read_cursors (chat_id, user_id, last_read_message_id, updated_at)
-    VALUES (${chatId}::uuid, ${userId}::uuid, ${normalized}, now())
+    VALUES (${chatId}::uuid, ${userId}::uuid, ${normalized}, ${updatedAt}::timestamptz)
     ON CONFLICT (chat_id, user_id) DO UPDATE SET
       last_read_message_id = EXCLUDED.last_read_message_id,
-      updated_at = now()
+      updated_at = EXCLUDED.updated_at
   `);
-  return !prev || isNewerMessageId(normalized, prev);
+  return { advanced: !prev || isNewerMessageId(normalized, prev), updatedAt };
 }
 
 export async function getUserReadCursorsByChat(userId: string): Promise<Map<string, string>> {
