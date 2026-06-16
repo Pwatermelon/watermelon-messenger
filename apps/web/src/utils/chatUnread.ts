@@ -25,7 +25,7 @@ export function isUnreadIncoming(
   userId: string
 ): boolean {
   if (!isCountableMessage(m)) return false;
-  if (m.senderId === userId) return false;
+  if (m.senderId.toLowerCase() === userId.toLowerCase()) return false;
   if (!lastReadMessageId) return false;
   return compareMessageId(m.id, lastReadMessageId) > 0;
 }

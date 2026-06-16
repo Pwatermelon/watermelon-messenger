@@ -86,7 +86,6 @@ export default function ChatLayout() {
       chatId,
       window.setTimeout(() => {
         timers.delete(chatId);
-        if (chatId === activeChatIdRef.current) return;
         void getChatUnreadCount(chatId).then((count) => {
           setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, unreadCount: count } : c)));
         });
