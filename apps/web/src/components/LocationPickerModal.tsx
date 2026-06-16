@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { IconLocation } from "./Icons";
-import { getYandexMapsApiKey, loadYandexMaps } from "../utils/yandexMaps";
 
 type Props = {
   onConfirm: (lat: number, lng: number) => void;
@@ -8,6 +9,12 @@ type Props = {
 };
 
 const DEFAULT_CENTER = { lat: 55.751244, lng: 37.618423 };
+
+const PICKER_MARKER = L.divIcon({
+  className: "location-picker-marker",
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+});
 
 type MapHandle = {
   setPoint: (lat: number, lng: number, center?: boolean) => void;
@@ -17,92 +24,64 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
   const mapNodeRef = useRef<HTMLDivElement>(null);
   const mapHandleRef = useRef<MapHandle | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [loading, setLoading] = useState(Boolean(getYandexMapsApiKey()));
+  const [loading, setLoading] = useState(true);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [mapError, setMapError] = useState(() =>
-    getYandexMapsApiKey() ? "" : "Карта недоступна без ключа Yandex Maps API. Можно отправить геопозицию кнопкой ниже."
-  );
+  const [mapError, setMapError] = useState("");
 
   useEffect(() => {
-    if (!getYandexMapsApiKey()) return;
+    if (!mapNodeRef.current) return;
 
     let destroyed = false;
-    let map: { destroy: () => void } | null = null;
+    const map = L.map(mapNodeRef.current, { zoomControl: true }).setView(
+      [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng],
+      11
+    );
 
-    void loadYandexMaps()
-      .then((ymaps) => ymaps.ready())
-      .then(() => {
-        if (destroyed || !mapNodeRef.current || !window.ymaps) return;
-        const ymaps = window.ymaps;
-        let placemark: { geometry: { setCoordinates: (c: number[]) => void } } | null = null;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
 
-        const setPoint = (lat: number, lng: number, center = false) => {
-          setCoords({ lat, lng });
-          const position = [lat, lng];
-          if (placemark) {
-            placemark.geometry.setCoordinates(position);
-          } else {
-            const pm = new ymaps.Placemark(position, {}, { preset: "islands#redDotIcon", draggable: true }) as {
-              geometry: { setCoordinates: (c: number[]) => void; getCoordinates?: () => number[] };
-              events?: { add: (event: string, cb: () => void) => void };
-            };
-            pm.events?.add("dragend", () => {
-              const c = pm.geometry.getCoordinates?.();
-              if (c && c.length >= 2) setCoords({ lat: c[0]!, lng: c[1]! });
-            });
-            placemark = pm;
-            mapInst.geoObjects.add(placemark);
-          }
-          if (center) mapInst.setCenter(position, 14);
-        };
+    let marker: L.Marker | null = null;
 
-        const mapInst = new ymaps.Map(mapNodeRef.current, {
-          center: [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng],
-          zoom: 11,
-          controls: ["zoomControl", "geolocationControl"],
+    const setPoint = (lat: number, lng: number, center = false) => {
+      setCoords({ lat, lng });
+      if (marker) {
+        marker.setLatLng([lat, lng]);
+      } else {
+        marker = L.marker([lat, lng], { draggable: true, icon: PICKER_MARKER }).addTo(map);
+        marker.on("dragend", () => {
+          const p = marker!.getLatLng();
+          setCoords({ lat: p.lat, lng: p.lng });
         });
+      }
+      if (center) map.setView([lat, lng], 14);
+    };
 
-        map = mapInst;
-        mapHandleRef.current = { setPoint };
-        setMapError("");
+    map.on("click", (e) => setPoint(e.latlng.lat, e.latlng.lng));
+    mapHandleRef.current = { setPoint };
 
-        mapInst.events.add("click", (e) => {
-          const c = e.get("coords") as number[];
-          if (!c || c.length < 2) return;
-          setPoint(c[0]!, c[1]!);
-        });
+    const finishInit = (lat: number, lng: number) => {
+      if (destroyed) return;
+      setPoint(lat, lng, true);
+      setLoading(false);
+      requestAnimationFrame(() => map.invalidateSize());
+    };
 
-        const finishInit = (lat: number, lng: number) => {
-          if (destroyed) return;
-          setPoint(lat, lng, true);
-          setLoading(false);
-        };
-
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => finishInit(pos.coords.latitude, pos.coords.longitude),
-            () => finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
-            { enableHighAccuracy: true, timeout: 12000 }
-          );
-        } else {
-          finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!destroyed) {
-          setMapError(
-            err instanceof Error
-              ? `${err.message}. Можно отправить геопозицию кнопкой «Моё местоположение».`
-              : "Карта не загрузилась. Можно отправить геопозицию кнопкой «Моё местоположение»."
-          );
-          setLoading(false);
-        }
-      });
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => finishInit(pos.coords.latitude, pos.coords.longitude),
+        () => finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
+        { enableHighAccuracy: true, timeout: 12000 }
+      );
+    } else {
+      finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+    }
 
     return () => {
       destroyed = true;
       mapHandleRef.current = null;
-      map?.destroy();
+      map.remove();
     };
   }, []);
 
@@ -112,6 +91,7 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
       return;
     }
     setGeoLoading(true);
+    setMapError("");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;
@@ -140,14 +120,13 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
           ×
         </button>
         <h3>Выберите точку на карте</h3>
-        <p className="location-picker-hint">Нажмите на карту, перетащите метку или отправьте своё местоположение</p>
-        {mapError ? (
-          <p className="location-picker-error">{mapError}</p>
-        ) : (
-          <div className="location-picker-map" ref={mapNodeRef} aria-busy={loading}>
-            {loading && <div className="location-picker-loading">Загрузка карты…</div>}
-          </div>
-        )}
+        <p className="location-picker-hint">
+          OpenStreetMap — нажмите на карту, перетащите метку или отправьте своё местоположение
+        </p>
+        {mapError ? <p className="location-picker-error">{mapError}</p> : null}
+        <div className="location-picker-map" ref={mapNodeRef} aria-busy={loading}>
+          {loading && <div className="location-picker-loading">Загрузка карты…</div>}
+        </div>
         {coords && (
           <p className="location-picker-coords">
             {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}

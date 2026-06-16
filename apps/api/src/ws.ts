@@ -8,7 +8,7 @@ import { db, users, chatMembers } from "./db";
 import { eq, and } from "drizzle-orm";
 import * as scylla from "./services/scylla";
 import * as redis from "./services/redis";
-import { notifyUser } from "./services/webPush";
+import { notifyChatMembersExcept } from "./services/chatNotifications";
 import { grantMediaFromAttachment } from "./services/mediaAccess";
 import { advanceReadCursor } from "./services/chatRead";
 import { incrementUnreadForChat } from "./services/chatUnread";
@@ -240,17 +240,9 @@ export const wsHandlers = {
           const payload: WSServerMessage = { type: "message", message };
           await publishChatEvent(chatId, payload);
 
-          const members = await db
-            .select({ userId: chatMembers.userId })
-            .from(chatMembers)
-            .where(eq(chatMembers.chatId, chatId));
           const preview = content.slice(0, 120) || "Новое сообщение";
           const title = u?.username ?? "Watermelon";
-          for (const m of members) {
-            if (m.userId !== ws.data.userId) {
-              notifyUser(m.userId, title, preview).catch(() => {});
-            }
-          }
+          await notifyChatMembersExcept(chatId, ws.data.userId, title, preview);
         } catch (e) {
           send(ws, { type: "error", error: String(e) });
         }

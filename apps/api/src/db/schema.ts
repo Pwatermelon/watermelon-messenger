@@ -62,6 +62,7 @@ export const chatMembers = pgTable(
     chatId: uuid("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     role: memberRoleEnum("role").notNull().default("member"),
+    muted: boolean("muted").notNull().default(false),
     joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [primaryKey({ columns: [t.chatId, t.userId] })]

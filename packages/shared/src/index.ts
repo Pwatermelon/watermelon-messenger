@@ -38,6 +38,21 @@ export interface Chat {
   lastMessagePreview: string | null;
   members: (User & { role: string })[];
   unreadCount?: number;
+  /** Push notifications muted for the current viewer */
+  notificationsMuted?: boolean;
+}
+
+export type ChatSharedCategory = "media" | "files" | "voice" | "links";
+
+export interface ChatSharedItem {
+  messageId: string;
+  messageType: MessageType;
+  attachmentUrl: string | null;
+  attachmentMetadata?: AttachmentMetadata | null;
+  content: string;
+  createdAt: string;
+  sender?: User;
+  links?: string[];
 }
 
 /** Message content type */
@@ -81,6 +96,13 @@ export interface Message {
   messageType?: MessageType;
   attachmentUrl?: string | null;
   attachmentMetadata?: AttachmentMetadata | null;
+  reactions?: MessageReaction[];
+}
+
+export interface MessageReaction {
+  emoji: string;
+  userId: string;
+  username?: string;
 }
 
 export type WSClientMessage =
@@ -96,7 +118,8 @@ export type WSClientMessage =
       attachmentMetadata?: AttachmentMetadata | null;
     }
   | { type: "typing"; chatId: string; isTyping: boolean }
-  | { type: "mark_read"; chatId: string; messageId?: string };
+  | { type: "mark_read"; chatId: string; messageId?: string }
+  | { type: "reaction"; chatId: string; messageId: string; emoji: string | null };
 
 export type WSServerMessage =
   | { type: "auth_ok"; user: User }
@@ -107,6 +130,7 @@ export type WSServerMessage =
   | { type: "chat_removed"; chatId: string }
   | { type: "chat_members_changed"; chatId: string }
   | { type: "read_receipt"; chatId: string; userId: string; messageId: string }
+  | { type: "reaction"; chatId: string; messageId: string; reactions: MessageReaction[] }
   | { type: "typing"; chatId: string; userId: string; isTyping: boolean }
   | { type: "presence"; userId: string; online: boolean }
   | { type: "error"; error: string };

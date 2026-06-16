@@ -15,6 +15,7 @@ import Profile from "./Profile";
 import ChatRoom from "./ChatRoom";
 import { APP_VERSION } from "../version";
 import { applyMessageToChatList, sortChatsByRecent } from "../utils/chatListUpdate";
+import { playMessageSound } from "../utils/messageSounds";
 import { useCompactLayout } from "../hooks/useCompactLayout";
 
 function EmptyChat() {
@@ -71,6 +72,8 @@ export default function ChatLayout() {
   activeChatIdRef.current = activeChatId;
   const userIdRef = useRef(user?.id);
   userIdRef.current = user?.id;
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
   const unreadRefreshTimersRef = useRef<Map<string, number>>(new Map());
 
   const refreshChatUnreadCount = useCallback((chatId: string) => {
@@ -146,12 +149,23 @@ export default function ChatLayout() {
   useEffect(() => {
     return subscribe((msg) => {
       if (msg.type === "message") {
+        const incoming = msg.message;
+        const isSystem = (incoming.messageType ?? "text") === "system";
+        const fromOther = incoming.senderId !== userIdRef.current;
+        const isActive = incoming.chatId === activeChatIdRef.current;
+
+        if (!isSystem && fromOther) {
+          const chat = chatsRef.current.find((c) => c.id === incoming.chatId);
+          if (!chat?.notificationsMuted) {
+            const hidden = document.visibilityState !== "visible";
+            if (isActive && !hidden) playMessageSound("incoming");
+            else playMessageSound("notification");
+          }
+        }
+
         setChats((prev) => {
-          const chatId = msg.message.chatId;
-          const isSystem = (msg.message.messageType ?? "text") === "system";
-          const isActive = chatId === activeChatIdRef.current;
-          const fromOther = msg.message.senderId !== userIdRef.current;
-          let next = applyMessageToChatList(prev, msg.message);
+          const chatId = incoming.chatId;
+          let next = applyMessageToChatList(prev, incoming);
           if (!isSystem && fromOther && !isActive) {
             next = next.map((c) =>
               c.id === chatId ? { ...c, unreadCount: (c.unreadCount ?? 0) + 1 } : c

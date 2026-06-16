@@ -5,13 +5,14 @@ import { ComposeRecorder } from "../components/ComposeRecorder";
 import { VoiceMessagePlayer } from "../components/VoiceMessagePlayer";
 import { CircleMessagePlayer } from "../components/CircleMessagePlayer";
 import { MessageContextMenu } from "../components/MessageContextMenu";
+import { MessageReactions } from "../components/MessageReactions";
 import { ForwardMessageModal } from "../components/ForwardMessageModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
 import { LocationPreview } from "../components/LocationPreview";
 import ImageCropModal from "../components/ImageCropModal";
-import BirthdayInfoBlock from "../components/BirthdayInfoBlock";
+import ChatInfoModal from "../components/ChatInfoModal";
 import { IconAttach, IconFile, IconLocation, IconPhoto, IconSend, IconTrash, IconVideo, IconBack, IconChevronDown } from "../components/Icons";
-import { getChat, getChats, getMessages, uploadFile, addGroupMembers, removeGroupMember, getUserByYandexLogin, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi } from "../api";
+import { getChat, getChats, getMessages, uploadFile, addGroupMembers, removeGroupMember, getUserByYandexLogin, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi, setMessageReaction } from "../api";
 import { extFromBlobType } from "../utils/mediaMime";
 import { compressImage, isGifFileDeep } from "../utils/imageCompress";
 import ImageLightbox from "../components/ImageLightbox";
@@ -37,7 +38,11 @@ import {
   findUnreadBounds,
   isMessageBelowViewport,
   scrollListToMessage,
+  compareMessageId,
 } from "../utils/chatUnread";
+import { getMessageReaders, isMessageReadByAnyPeer } from "../utils/messageRead";
+import { formatMessageDateLabel, shouldShowDateDivider } from "../utils/messageDates";
+import { playMessageSound } from "../utils/messageSounds";
 
 type ChatRoomProps = {
   chatId: string;
@@ -68,7 +73,6 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   const [contactInfoOpen, setContactInfoOpen] = useState(false);
   const [deleteChatConfirmOpen, setDeleteChatConfirmOpen] = useState(false);
   const [deleteChatBusy, setDeleteChatBusy] = useState(false);
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [groupAddLogin, setGroupAddLogin] = useState("");
   const [groupAddError, setGroupAddError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -104,6 +108,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   const prependingOlderRef = useRef(false);
   const pendingPrependRef = useRef<PrependScrollState | null>(null);
   const [prependTick, setPrependTick] = useState(0);
+  const lastMarkedReadRef = useRef<string | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -116,19 +121,26 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }, [loading]);
 
   function applyReadCursors(rows: { userId: string; lastReadMessageId: string }[]) {
-    const map = Object.fromEntries(rows.map((r) => [r.userId, r.lastReadMessageId]));
+    const map = Object.fromEntries(
+      rows.map((r) => [r.userId, r.lastReadMessageId.trim().toLowerCase()])
+    );
     readCursorsRef.current = map;
     setReadCursors(map);
   }
 
+  function canMarkReadNow(): boolean {
+    return typeof document === "undefined" || document.visibilityState === "visible";
+  }
+
   function markChatRead(messageId?: string) {
-    if (!chatId || !user?.id) return;
+    if (!chatId || !user?.id || !canMarkReadNow()) return;
     if (messageId) {
       const normalized = messageId.toLowerCase();
       const mine = readCursorsRef.current[user.id];
-      if (mine && mine.toLowerCase() >= normalized) return;
+      if (mine && compareMessageId(mine, normalized) >= 0) return;
       readCursorsRef.current[user.id] = normalized;
       setReadCursors((prev) => ({ ...prev, [user.id]: normalized }));
+      lastMarkedReadRef.current = normalized;
     }
     if (ready) {
       send(messageId ? { type: "mark_read", chatId, messageId: messageId.toLowerCase() } : { type: "mark_read", chatId });
@@ -140,10 +152,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     }).catch(() => {});
   }
 
+  function getPeerReaders(m: Message) {
+    return getMessageReaders(m.id, chat?.members ?? [], readCursors, user?.id);
+  }
+
   function isMessageReadByPeers(m: Message): boolean {
     if (m.senderId !== user?.id) return false;
-    const peers = chat?.members.filter((mem) => mem.id !== user?.id) ?? [];
-    return peers.some((p) => (readCursors[p.id] ?? "") >= m.id);
+    return isMessageReadByAnyPeer(m.id, chat?.members ?? [], readCursors, user?.id);
   }
 
   useEffect(() => {
@@ -169,17 +184,6 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
       if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (!contactInfoOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (selectedMemberId) setSelectedMemberId(null);
-      else setContactInfoOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [contactInfoOpen, selectedMemberId]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -321,13 +325,21 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         );
       }
       if (msg.type === "read_receipt" && msg.chatId === chatId) {
+        const incomingId = msg.messageId.toLowerCase();
         setReadCursors((prev) => {
           const cur = prev[msg.userId];
-          if (cur && cur >= msg.messageId) return prev;
-          const next = { ...prev, [msg.userId]: msg.messageId };
+          if (cur && compareMessageId(cur, incomingId) >= 0) return prev;
+          const next = { ...prev, [msg.userId]: incomingId };
           readCursorsRef.current = next;
           return next;
         });
+      }
+      if (msg.type === "reaction" && msg.chatId === chatId) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id.toLowerCase() === msg.messageId.toLowerCase() ? { ...m, reactions: msg.reactions } : m
+          )
+        );
       }
       if (msg.type === "chat_members_changed" && msg.chatId === chatId) {
         void getChat(chatId).then((c) => {
@@ -517,8 +529,9 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   useEffect(() => {
     return () => {
       const id = chatId;
-      if (!id) return;
-      void markChatReadApi(id).catch(() => {});
+      const lastRead = lastMarkedReadRef.current;
+      if (!id || !lastRead) return;
+      void markChatReadApi(id, lastRead).catch(() => {});
     };
   }, [chatId]);
 
@@ -614,6 +627,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
       attachmentUrl: opts.attachmentUrl ?? null,
       attachmentMetadata: replyMeta,
     });
+    playMessageSound("outgoing");
   }
 
   async function sendMessage(opts: {
@@ -1013,6 +1027,37 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     }
   }
 
+  function messageHasDownloadableMedia(m: Message): boolean {
+    const mt = m.messageType ?? "text";
+    return mt === "image" || mt === "video";
+  }
+
+  function handleDownloadMedia(m: Message) {
+    setMessageMenu(null);
+    const url = m.attachmentUrl;
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = mediaDownloadUrl(url, m.attachmentMetadata?.fileName);
+    a.download = m.attachmentMetadata?.fileName ?? "";
+    a.rel = "noopener";
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function handleReaction(m: Message, emoji: string) {
+    if (!chatId) return;
+    const mine = m.reactions?.find((r) => r.userId === user?.id);
+    const nextEmoji = mine?.emoji === emoji ? null : emoji;
+    try {
+      const reactions = await setMessageReaction(chatId, m.id, nextEmoji);
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions } : x)));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   function handleForwardStart(m: Message) {
     setMessageMenu(null);
     setForwardTarget(m);
@@ -1113,7 +1158,6 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     if (!chatId) return;
     try {
       await removeGroupMember(chatId, memberId);
-      setSelectedMemberId(null);
       if (memberId === user?.id) {
         window.dispatchEvent(new Event("wm:refresh-chats"));
         onClose();
@@ -1236,8 +1280,16 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
                 <span className="messages-load-older-spinner" />
               </div>
             )}
-            {messages.map((m) => {
+            {messages.map((m, msgIndex) => {
             const mt = m.messageType ?? "text";
+            const prevCountable = messages
+              .slice(0, msgIndex)
+              .reverse()
+              .find((x) => (x.messageType ?? "text") !== "system");
+            const dateLabel =
+              mt !== "system" ? formatMessageDateLabel(m.createdAt) : null;
+            const showDateDivider =
+              mt !== "system" && shouldShowDateDivider(m.createdAt, prevCountable?.createdAt);
             const showUnreadDivider = unreadBounds.first?.id === m.id;
             if (mt === "system") {
               return (
@@ -1255,10 +1307,16 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
             }
             const naked = mt === "circle" || mt === "voice" || mt === "image";
             const own = m.senderId === user?.id;
+            const peerReaders = own ? getPeerReaders(m) : [];
             const selectable = canDeleteMessage(m);
             const selected = selectedIds.has(m.id);
             return (
             <div key={m.id}>
+              {showDateDivider && dateLabel && (
+                <div className="messages-date-divider" role="separator">
+                  <span>{dateLabel}</span>
+                </div>
+              )}
               {showUnreadDivider && (
                 <div className="messages-unread-divider" role="separator">
                   <span>Непрочитанные сообщения</span>
@@ -1357,6 +1415,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
                   duration={m.attachmentMetadata?.duration}
                 />
               )}
+              {(m.reactions?.length ?? 0) > 0 && (
+                <MessageReactions
+                  reactions={m.reactions ?? []}
+                  userId={user?.id}
+                  onToggle={(emoji) => void handleReaction(m, emoji)}
+                />
+              )}
               {(mt !== "circle" && mt !== "voice") || (own && isMessageReadByPeers(m)) ? (
               <div className="message-meta">
                 {mt !== "circle" && mt !== "voice" && (
@@ -1368,8 +1433,16 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
                   </div>
                 )}
                 {own && isMessageReadByPeers(m) && (
-                  <span className="message-read-receipt" title="Прочитано" aria-label="Прочитано">
-                    🍉
+                  <span
+                    className="message-read-receipt"
+                    title={
+                      chat?.type === "group"
+                        ? `Просмотрели: ${peerReaders.map((r) => r.username).join(", ")}`
+                        : "Прочитано"
+                    }
+                    aria-label="Прочитано"
+                  >
+                    🍉{chat?.type === "group" && peerReaders.length > 1 ? ` ${peerReaders.length}` : ""}
                   </span>
                 )}
               </div>
@@ -1487,244 +1560,31 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         />
       )}
 
-      {contactInfoOpen && chat && (
-        <div
-          className="contact-info-overlay"
-          onClick={() => { setContactInfoOpen(false); setSelectedMemberId(null); setGroupAddError(""); }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Информация о чате"
-        >
-          <div className="contact-info-modal" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="modal-close" onClick={() => { setContactInfoOpen(false); setSelectedMemberId(null); }} aria-label="Закрыть">×</button>
-            {chat.type === "dm" && otherMember ? (
-              <>
-                <div className="contact-info-avatar-wrap">
-                  {otherMember.avatarUrl ? (
-                    <img
-                      src={mediaUrl(otherMember.avatarUrl)}
-                      alt=""
-                      className="contact-info-avatar"
-                    />
-                  ) : (
-                    <div className="contact-info-avatar-placeholder">
-                      {(otherMember.username ?? "?").slice(0, 1).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <p className="contact-info-name">{otherMember.username}</p>
-                {otherMember.birthdayLabel && (
-                  <BirthdayInfoBlock
-                    label={otherMember.birthdayLabel}
-                    age={otherMember.birthdayAge}
-                    isToday={otherMember.isBirthdayToday}
-                    compact
-                  />
-                )}
-                {otherMember.yandexLogin && (
-                  <div className="contact-info-id-block">
-                    <span className="contact-info-label">Логин</span>
-                    <code className="contact-info-code">{otherMember.yandexLogin}</code>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="contact-info-profile-btn"
-                  onClick={() => {
-                    setContactInfoOpen(false);
-                    openProfile(otherMember.id);
-                  }}
-                >
-                  Открыть профиль
-                </button>
-                <button
-                  type="button"
-                  className="contact-info-remove-btn"
-                  onClick={requestDeleteChat}
-                >
-                  Удалить чат
-                </button>
-              </>
-            ) : chat.type === "dm" ? (
-              <>
-                <div className="contact-info-avatar-wrap">
-                  <div className="contact-info-avatar-placeholder">?</div>
-                </div>
-                <p className="contact-info-name">Собеседник недоступен</p>
-                <p className="contact-info-muted" style={{ margin: "0 0 1rem", color: "var(--muted)", fontSize: "0.9rem" }}>
-                  Возможно, собеседник удалил этот чат. Вы можете удалить его у себя.
-                </p>
-                <button
-                  type="button"
-                  className="contact-info-remove-btn"
-                  onClick={requestDeleteChat}
-                >
-                  Удалить чат
-                </button>
-              </>
-            ) : chat.type === "group" && selectedMemberId ? (
-              (() => {
-                const m = chat.members.find((x) => x.id === selectedMemberId);
-                if (!m) return null;
-                return (
-                  <>
-                    <button type="button" className="contact-info-back" onClick={() => setSelectedMemberId(null)}>
-                      ← Назад
-                    </button>
-                    <div className="contact-info-avatar-wrap">
-                      {m.avatarUrl ? (
-                        <img
-                          src={mediaUrl(m.avatarUrl)}
-                          alt=""
-                          className="contact-info-avatar"
-                        />
-                      ) : (
-                        <div className="contact-info-avatar-placeholder">
-                          {(m.username ?? "?").slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <p className="contact-info-name">{m.username}</p>
-                    {m.birthdayLabel && (
-                      <BirthdayInfoBlock label={m.birthdayLabel} age={m.birthdayAge} isToday={m.isBirthdayToday} compact />
-                    )}
-                    {m.yandexLogin && (
-                      <div className="contact-info-id-block">
-                        <span className="contact-info-label">Логин</span>
-                        <code className="contact-info-code">{m.yandexLogin}</code>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      className="contact-info-profile-btn"
-                      onClick={() => {
-                        setContactInfoOpen(false);
-                        openProfile(m.id);
-                      }}
-                    >
-                      Открыть профиль
-                    </button>
-                        {isGroupAdmin && m.id !== user?.id && (
-                      <button
-                        type="button"
-                        className="contact-info-remove-btn"
-                        onClick={() => handleRemoveGroupMember(m.id)}
-                      >
-                        Удалить из группы
-                      </button>
-                    )}
-                  </>
-                );
-              })()
-            ) : chat.type === "group" ? (
-              <>
-                <p className="contact-info-name contact-info-group-title">{chat.name ?? "Группа"}</p>
-                <div className="contact-info-group-avatar-block">
-                  <div className="contact-info-group-avatar">
-                    {chat.avatarUrl ? (
-                      <img
-                        src={mediaUrl(chat.avatarUrl)}
-                        alt=""
-                      />
-                    ) : (
-                      (chat.name ?? "Группа").slice(0, 1).toUpperCase()
-                    )}
-                  </div>
-                  {isGroupAdmin && (
-                    <>
-                      <input
-                        type="file"
-                        ref={groupAvatarInputRef}
-                        accept="image/*"
-                        onChange={handleGroupAvatarPick}
-                        style={{ display: "none" }}
-                      />
-                      <button
-                        type="button"
-                        className="contact-info-group-avatar-change"
-                        onClick={() => groupAvatarInputRef.current?.click()}
-                        disabled={sending}
-                      >
-                        Сменить аватар группы
-                      </button>
-                    </>
-                  )}
-                </div>
-                <p className="contact-info-members-label">Участники</p>
-                <ul className="contact-info-members">
-                  {chat.members.map((m) => (
-                    <li key={m.id} className="contact-info-member">
-                      <button
-                        type="button"
-                        className="contact-info-member-btn"
-                        onClick={() => setSelectedMemberId(m.id)}
-                      >
-                        <div className="contact-info-member-avatar">
-                          {m.avatarUrl ? (
-                            <img src={mediaUrl(m.avatarUrl)} alt="" />
-                          ) : (
-                            (m.username ?? "?").slice(0, 1).toUpperCase()
-                          )}
-                        </div>
-                        <div className="contact-info-member-body">
-                          <span className="contact-info-member-name">{m.username}</span>
-                        </div>
-                      </button>
-                      {isGroupAdmin && m.id !== user?.id && (
-                        <button
-                          type="button"
-                          className="contact-info-member-remove"
-                          onClick={(e) => { e.stopPropagation(); handleRemoveGroupMember(m.id); }}
-                          title="Удалить из группы"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                {isGroupAdmin && (
-                  <div className="contact-info-add-members">
-                    <p className="contact-info-members-label">Добавить по логину</p>
-                    <div className="search-id-row">
-                      <input
-                        type="text"
-                        placeholder="Логин"
-                        value={groupAddLogin}
-                        onChange={(e) => { setGroupAddLogin(e.target.value); setGroupAddError(""); }}
-                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddGroupMember())}
-                        spellCheck={false}
-                        autoComplete="off"
-                      />
-                      <button type="button" className="btn" onClick={handleAddGroupMember} disabled={!groupAddLogin.trim()}>
-                        Добавить
-                      </button>
-                    </div>
-                    {groupAddError && <p className="search-error">{groupAddError}</p>}
-                  </div>
-                )}
-                {user && (
-                  <button
-                    type="button"
-                    className="contact-info-remove-btn"
-                    onClick={() => handleRemoveGroupMember(user.id)}
-                  >
-                    Покинуть группу
-                  </button>
-                )}
-                {isGroupAdmin && (
-                  <button
-                    type="button"
-                    className="contact-info-remove-btn"
-                    onClick={requestDeleteChat}
-                  >
-                    Удалить группу
-                  </button>
-                )}
-              </>
-            ) : null}
-          </div>
-        </div>
+      {contactInfoOpen && chat && user && (
+        <ChatInfoModal
+          chat={chat}
+          currentUserId={user.id}
+          otherMember={otherMember}
+          open={contactInfoOpen}
+          onClose={() => {
+            setContactInfoOpen(false);
+            setGroupAddError("");
+          }}
+          openProfile={openProfile}
+          notificationsMuted={chat.notificationsMuted ?? false}
+          onNotificationsMutedChange={(muted) => setChat((c) => (c ? { ...c, notificationsMuted: muted } : c))}
+          isGroupAdmin={isGroupAdmin}
+          sending={sending}
+          groupAvatarInputRef={groupAvatarInputRef}
+          onGroupAvatarPick={handleGroupAvatarPick}
+          groupAddLogin={groupAddLogin}
+          setGroupAddLogin={setGroupAddLogin}
+          groupAddError={groupAddError}
+          onAddGroupMember={handleAddGroupMember}
+          onRemoveGroupMember={handleRemoveGroupMember}
+          onRequestDeleteChat={requestDeleteChat}
+          onLeaveGroup={() => user && handleRemoveGroupMember(user.id)}
+        />
       )}
 
       {deleteChatConfirmOpen && (
@@ -1776,9 +1636,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         <MessageContextMenu
           x={messageMenu.x}
           y={messageMenu.y}
+          readers={getPeerReaders(messageMenu.message)}
+          canDownload={messageHasDownloadableMedia(messageMenu.message)}
           onReply={() => handleReplyStart(messageMenu.message)}
           onEdit={canEditMessage(messageMenu.message) ? () => handleEditStart(messageMenu.message) : undefined}
           onForward={() => handleForwardStart(messageMenu.message)}
+          onDownload={() => handleDownloadMedia(messageMenu.message)}
+          onReaction={(emoji) => void handleReaction(messageMenu.message, emoji)}
           onClose={() => setMessageMenu(null)}
         />
       )}

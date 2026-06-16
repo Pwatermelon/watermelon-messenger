@@ -6,6 +6,7 @@ import { updateProfile, uploadFile } from "../api";
 import { mediaUrl } from "../utils/mediaUrl";
 import { compressImage } from "../utils/imageCompress";
 import { subscribeToPush, unsubscribeFromPush, isPushServerConfigured } from "../lib/pushNotifications";
+import { areMessageSoundsEnabled, setMessageSoundsEnabled } from "../utils/messageSounds";
 import { logoutViaYandex } from "../lib/yandexLogout";
 import { formatBirthdayLabel, getBirthdayAge } from "@melon/shared";
 import BirthdayInfoBlock from "./BirthdayInfoBlock";
@@ -54,6 +55,7 @@ export default function SettingsModal({ onClose }: Props) {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [pushServerOk, setPushServerOk] = useState<boolean | null>(null);
+  const [messageSoundsEnabled, setMessageSoundsEnabledState] = useState(areMessageSoundsEnabled);
   const [birthdayVisible, setBirthdayVisible] = useState(user?.birthdayVisible ?? false);
   const [privacyLoading, setPrivacyLoading] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
@@ -315,6 +317,21 @@ export default function SettingsModal({ onClose }: Props) {
 
             <section className="settings-card">
               <h3 className="settings-card-title">Уведомления</h3>
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <span className="settings-row-label">Звуки сообщений</span>
+                  <span className="settings-row-hint">Отправка, получение и фоновые уведомления</span>
+                </div>
+                <SettingsSwitch
+                  checked={messageSoundsEnabled}
+                  onChange={() => {
+                    const next = !messageSoundsEnabled;
+                    setMessageSoundsEnabled(next);
+                    setMessageSoundsEnabledState(next);
+                  }}
+                  label="Звуки сообщений"
+                />
+              </div>
               <div className="settings-row">
                 <div className="settings-row-text">
                   <span className="settings-row-label">Push-уведомления</span>

@@ -1,4 +1,4 @@
-import type { AttachmentMetadata, MessageType, User } from "@melon/shared";
+import type { AttachmentMetadata, ChatSharedCategory, ChatSharedItem, MessageType, User } from "@melon/shared";
 import { getApiUrl } from "./config";
 
 function getToken(): string | null {
@@ -69,6 +69,7 @@ const chatResponseType = {
   createdAt: "",
   lastMessageAt: null as string | null,
   lastMessagePreview: null as string | null,
+  notificationsMuted: false as boolean | undefined,
   members: [] as Array<{ id: string; username: string; avatarUrl: string | null; subscriptionTier?: string; role: string }>,
 };
 
@@ -111,6 +112,41 @@ export async function getChat(chatId: string): Promise<ChatResponse | null> {
     headers: { Authorization: `Bearer ${getToken()}` },
   });
   if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getChatShared(
+  chatId: string,
+  category: ChatSharedCategory,
+  opts?: { limit?: number; before?: string }
+): Promise<{ items: ChatSharedItem[]; hasMore: boolean }> {
+  const params = new URLSearchParams({ category });
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.before) params.set("before", opts.before);
+  const res = await fetch(
+    `${getApiUrl()}/chats/${encodeURIComponent(chatId)}/shared?${params}`,
+    { headers: { Authorization: `Bearer ${getToken()}` } }
+  );
+  if (!res.ok) throw new Error("Failed to load shared items");
+  return res.json();
+}
+
+export async function updateChatNotifications(
+  chatId: string,
+  muted: boolean
+): Promise<{ notificationsMuted: boolean }> {
+  const res = await fetch(`${getApiUrl()}/chats/${encodeURIComponent(chatId)}/notifications`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ muted }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Failed to update notifications");
+  }
   return res.json();
 }
 
@@ -358,6 +394,27 @@ export async function forwardMessage(
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "Не удалось переслать сообщение");
   return data.message as MessageItem;
+}
+
+export async function setMessageReaction(
+  chatId: string,
+  messageId: string,
+  emoji: string | null
+): Promise<import("@melon/shared").MessageReaction[]> {
+  const res = await fetch(
+    `${getApiUrl()}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/reaction`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({ emoji }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Не удалось поставить реакцию");
+  return data.reactions ?? [];
 }
 
 export async function deleteChat(chatId: string): Promise<void> {

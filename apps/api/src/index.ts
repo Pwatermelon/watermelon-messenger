@@ -106,6 +106,20 @@ async function main() {
         PRIMARY KEY (chat_id, user_id)
       )
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        chat_id uuid NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        message_id text NOT NULL,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        emoji text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (message_id, user_id)
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS message_reactions_chat_idx ON message_reactions (chat_id)
+    `);
+    await db.execute(sql`ALTER TABLE chat_members ADD COLUMN IF NOT EXISTS muted boolean NOT NULL DEFAULT false`);
   } catch (e) {
     console.warn("Schema migration (optional):", e);
   }

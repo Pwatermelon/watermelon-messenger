@@ -4,8 +4,9 @@ import { authPlugin, requireAuth } from "../auth";
 import { db, users, chats, chatMembers } from "../db";
 import { getMessages as scyllaGetMessages, getMessage as scyllaGetMessage, deleteMessage as scyllaDeleteMessage, insertMessage as scyllaInsertMessage, deleteChatMessages, updateMessageContent as scyllaUpdateMessageContent } from "../services/scylla";
 import { publishChatEvent, kickUserFromChat } from "../ws";
-import { notifyUser } from "../services/webPush";
-import type { AttachmentMetadata, Message as MessageDto, MessageType, Message } from "@melon/shared";
+import { notifyChatMembersExcept } from "../services/chatNotifications";
+import { getChatSharedItems } from "../services/chatSharedMedia";
+import type { AttachmentMetadata, Message as MessageDto, MessageType, Message, ChatSharedCategory } from "@melon/shared";
 import { toPublicProfile } from "../lib/userDto";
 import { usersShareChat } from "../lib/chatAccess";
 import {
@@ -23,6 +24,7 @@ import {
 import { getReadCursors, getUserReadCursorsByChat } from "../services/readReceipts";
 import { advanceReadCursor } from "../services/chatRead";
 import { resolveUnreadCount, incrementUnreadForChat } from "../services/chatUnread";
+import { getReactionsForMessages, setMessageReaction } from "../services/reactions";
 
 function toUser(u: typeof users.$inferSelect) {
   return toPublicProfile(u);
@@ -79,6 +81,7 @@ type ChatDto = {
   lastMessageAt?: string | null;
   lastMessagePreview?: string | null;
   unreadCount?: number;
+  notificationsMuted?: boolean;
   members: Array<ReturnType<typeof toUser> & { role: string }>;
 };
 
@@ -94,7 +97,8 @@ async function buildChatDto(
   chat: typeof chats.$inferSelect,
   members: Array<{ user: typeof users.$inferSelect; role: string }>,
   viewerId: string,
-  lastRead: string | null
+  lastRead: string | null,
+  notificationsMuted = false
 ): Promise<ChatDto> {
   let lastMessagePreview: string | null = null;
   let lastMessageAt: string | null = null;
@@ -122,6 +126,7 @@ async function buildChatDto(
     lastMessageAt,
     lastMessagePreview,
     unreadCount,
+    notificationsMuted,
     members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
   };
 }
@@ -210,6 +215,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       .select({
         chatId: chatMembers.chatId,
         role: chatMembers.role,
+        muted: chatMembers.muted,
         chat: chats,
       })
       .from(chatMembers)
@@ -260,6 +266,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         lastMessageAt,
         lastMessagePreview,
         unreadCount,
+        notificationsMuted: row.muted,
         members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
       });
     }
@@ -309,7 +316,12 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         .where(eq(chatMembers.chatId, chat.id));
       const readMap = await getUserReadCursorsByChat(u.id);
       const lastRead = readMap.get(chat.id) ?? null;
-      return signChatDto(await buildChatDto(chat, members, u.id, lastRead), u.id);
+      const [myRow] = await db
+        .select({ muted: chatMembers.muted })
+        .from(chatMembers)
+        .where(and(eq(chatMembers.chatId, chat.id), eq(chatMembers.userId, u.id)))
+        .limit(1);
+      return signChatDto(await buildChatDto(chat, members, u.id, lastRead, myRow?.muted ?? false), u.id);
     }
     const [chat] = await db.insert(chats).values({ type: "dm" }).returning();
     await db.insert(chatMembers).values([
@@ -321,7 +333,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       .from(chatMembers)
       .innerJoin(users, eq(users.id, chatMembers.userId))
       .where(eq(chatMembers.chatId, chat.id));
-    return signChatDto(await buildChatDto(chat, members, u.id, null), u.id);
+    return signChatDto(await buildChatDto(chat, members, u.id, null, false), u.id);
   })
   .post("/group", async ({ user, body, set }) => {
     const u = requireAuth(set)(user);
@@ -359,6 +371,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         createdAt: chat.createdAt?.toISOString?.(),
         lastMessageAt: null,
         lastMessagePreview: null,
+        notificationsMuted: false,
         members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
       },
       u.id
@@ -410,6 +423,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         createdAt: chatRow.createdAt?.toISOString?.(),
         lastMessageAt,
         lastMessagePreview,
+        notificationsMuted: myMember.muted,
         members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
       },
       u.id
@@ -476,6 +490,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         createdAt: chatRow.createdAt?.toISOString?.(),
         lastMessageAt,
         lastMessagePreview,
+        notificationsMuted: myMember.muted,
         members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
       },
       u.id
@@ -531,6 +546,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         createdAt: chatRow.createdAt?.toISOString?.(),
         lastMessageAt,
         lastMessagePreview,
+        notificationsMuted: myMember.muted,
         members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
       },
       u.id
@@ -607,11 +623,16 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         return rowToMessageDto(r, u.id, sender);
       })
     );
+    const reactionMap = await getReactionsForMessages(messages.map((m) => m.id));
+    const withReactions = messages.map((m) => ({
+      ...m,
+      reactions: reactionMap[m.id.toLowerCase()] ?? reactionMap[m.id] ?? [],
+    }));
     const readCursors = await getReadCursors(chatId);
     const readMap = await getUserReadCursorsByChat(u.id);
     const myLastReadMessageId = readMap.get(chatId) ?? null;
     const unreadCount = await resolveUnreadCount(chatId, u.id, myLastReadMessageId);
-    return { messages: messages.slice().reverse(), readCursors, myLastReadMessageId, unreadCount };
+    return { messages: withReactions.slice().reverse(), readCursors, myLastReadMessageId, unreadCount };
   })
   .patch("/:id/messages/:messageId", async ({ user, params, body, set }) => {
     const u = requireAuth(set)(user);
@@ -683,6 +704,30 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
     await publishChatEvent(chatId, { type: "message_deleted", chatId, messageId });
     return { success: true };
   })
+  .put("/:id/messages/:messageId/reaction", async ({ user, params, body, set }) => {
+    const u = requireAuth(set)(user);
+    const { id: chatId, messageId } = params;
+    const [member] = await db
+      .select()
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, u.id)))
+      .limit(1);
+    if (!member) {
+      set.status = 403;
+      return { error: "Not a member of this chat" };
+    }
+    const row = await scyllaGetMessage(chatId, messageId);
+    if (!row) {
+      set.status = 404;
+      return { error: "Message not found" };
+    }
+    const payload = body as { emoji?: string | null };
+    const emoji = payload.emoji === null || payload.emoji === undefined ? null : String(payload.emoji);
+    const reactions = await setMessageReaction(chatId, messageId, u.id, emoji);
+    const normalizedId = messageId.trim().toLowerCase();
+    await publishChatEvent(chatId, { type: "reaction", chatId, messageId: normalizedId, reactions });
+    return { reactions };
+  })
   .post("/:id/messages/forward", async ({ user, params, body, set }) => {
     const u = requireAuth(set)(user);
     const targetChatId = params.id;
@@ -747,17 +792,9 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
     };
     await publishChatEvent(targetChatId, { type: "message", message: wsMessage });
     await incrementUnreadForChat(targetChatId, u.id).catch(() => {});
-    const members = await db
-      .select({ userId: chatMembers.userId })
-      .from(chatMembers)
-      .where(eq(chatMembers.chatId, targetChatId));
     const preview = row.content.slice(0, 120) || "Пересланное сообщение";
     const title = senderUser?.username ?? "Watermelon";
-    for (const m of members) {
-      if (m.userId !== u.id) {
-        notifyUser(m.userId, title, preview).catch(() => {});
-      }
-    }
+    await notifyChatMembersExcept(targetChatId, u.id, title, preview);
     const message = await rowToMessageDto(
       {
         message_id: newId,
@@ -868,10 +905,55 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
         createdAt: updatedChat.createdAt?.toISOString?.(),
         lastMessageAt,
         lastMessagePreview,
+        notificationsMuted: myMember.muted,
         members: members.map((m) => ({ ...toUser(m.user), role: m.role })),
       },
       u.id
     );
+  })
+  .get("/:id/shared", async ({ user, params, query, set }) => {
+    const u = requireAuth(set)(user);
+    const { id: chatId } = params;
+    const [myMember] = await db
+      .select()
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, u.id)))
+      .limit(1);
+    if (!myMember) {
+      set.status = 403;
+      return { error: "Not a member" };
+    }
+    const category = String(query?.category ?? "media") as ChatSharedCategory;
+    if (!["media", "files", "voice", "links"].includes(category)) {
+      set.status = 400;
+      return { error: "Invalid category" };
+    }
+    const limit = Math.min(Math.max(Number(query?.limit) || 48, 1), 60);
+    const before = typeof query?.before === "string" && query.before ? query.before : undefined;
+    return getChatSharedItems(chatId, u.id, category, limit, before);
+  })
+  .patch("/:id/notifications", async ({ user, params, body, set }) => {
+    const u = requireAuth(set)(user);
+    const { id: chatId } = params;
+    const [myMember] = await db
+      .select()
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, u.id)))
+      .limit(1);
+    if (!myMember) {
+      set.status = 403;
+      return { error: "Not a member" };
+    }
+    const payload = body as { muted?: boolean };
+    if (typeof payload.muted !== "boolean") {
+      set.status = 400;
+      return { error: "muted is required" };
+    }
+    await db
+      .update(chatMembers)
+      .set({ muted: payload.muted })
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, u.id)));
+    return { notificationsMuted: payload.muted };
   })
   .delete("/:id", async ({ user, params, set }) => {
     const u = requireAuth(set)(user);
