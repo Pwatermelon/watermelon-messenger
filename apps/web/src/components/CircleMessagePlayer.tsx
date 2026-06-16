@@ -217,7 +217,8 @@ export function CircleMessagePlayer({ src, duration: metaDuration, size = DEFAUL
   const offset = circumference * (1 - progress);
 
   return (
-    <div className="circle-player" style={{ width: outer, height: outer }}>
+    <div className="circle-player-stack">
+      <div className="circle-player" style={{ width: outer, height: outer }}>
       <button
         type="button"
         className="circle-player-video-btn"
@@ -280,6 +281,7 @@ export function CircleMessagePlayer({ src, duration: metaDuration, size = DEFAUL
           transform={`rotate(-90 ${cx} ${cx})`}
         />
       </svg>
+      </div>
       <span className="circle-player-time">
         {unsupported ? "WebM" : error ? "Ошибка" : `${formatTime(current)}${duration ? ` / ${formatTime(duration)}` : ""}`}
       </span>

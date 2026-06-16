@@ -4,6 +4,7 @@ import { getMessageAttachments, isGifAttachment } from "../utils/messageAttachme
 
 type Props = {
   message: Message;
+  priority?: boolean;
   onOpenLightbox: (urls: string[], index: number) => void;
 };
 
@@ -11,11 +12,13 @@ function MediaTile({
   attachment,
   count,
   index,
+  priority,
   onOpen,
 }: {
   attachment: MessageAttachment;
   count: number;
   index: number;
+  priority?: boolean;
   onOpen: (index: number) => void;
 }) {
   const src = mediaUrl(attachment.url);
@@ -31,7 +34,7 @@ function MediaTile({
         src={src}
         alt=""
         className={`message-media-img${isGif ? " message-media-img-gif" : ""}`}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
         decoding="async"
       />
       {isGif && <span className="message-media-gif-badge">GIF</span>}
@@ -39,13 +42,12 @@ function MediaTile({
   );
 }
 
-export function MessageMediaGallery({ message, onOpenLightbox }: Props) {
+export function MessageMediaGallery({ message, priority = false, onOpenLightbox }: Props) {
   const attachments = getMessageAttachments(message);
   if (attachments.length === 0) return null;
 
   const urls = attachments.map((a) => mediaUrl(a.url));
   const count = attachments.length;
-  const hasGif = attachments.some(isGifAttachment);
 
   return (
     <div className={`message-media-grid message-media-grid--${Math.min(count, 5)}`}>
@@ -55,12 +57,10 @@ export function MessageMediaGallery({ message, onOpenLightbox }: Props) {
           attachment={a}
           count={count}
           index={i}
+          priority={priority}
           onOpen={(idx) => onOpenLightbox(urls, idx)}
         />
       ))}
-      {count === 1 && (
-        <span className="message-image-caption">{hasGif ? "GIF" : "Фотография"}</span>
-      )}
     </div>
   );
 }

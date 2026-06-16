@@ -125,8 +125,14 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
     holdActivatedRef.current = false;
     recordingStartedRef.current = false;
     const min = isVoice ? MIN_VOICE_BYTES : MIN_CIRCLE_BYTES;
-    if (isVoice && blob.size >= min) await onVoiceSend(blob, d);
-    if (!isVoice && blob.size >= min) await onCircleSend(blob, d);
+    if (blob.size < min) {
+      setRecordError(isVoice ? "Слишком короткая запись" : "Не удалось записать кружок — удерживайте кнопку дольше");
+      sendingRef.current = false;
+      activeRecorder().releaseAcquire();
+      return;
+    }
+    if (isVoice) await onVoiceSend(blob, d);
+    else await onCircleSend(blob, d);
     sendingRef.current = false;
   }
 
@@ -230,6 +236,9 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
       return;
     }
     if (holdActivatedRef.current) {
+      if (!isRecording) {
+        setRecordError("Не удалось начать запись");
+      }
       cancelRecording();
     }
     holdActivatedRef.current = false;

@@ -63,6 +63,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [messagesReady, setMessagesReady] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -246,6 +247,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     setEditDraft(null);
     stickToBottomRef.current = true;
     pendingInitialScrollRef.current = true;
+    setMessagesReady(false);
     suppressAutoReadRef.current = false;
     serverUnreadCountRef.current = 0;
     setServerUnreadCount(0);
@@ -417,7 +419,6 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     loadOlderLockRef.current = true;
     loadingOlderRef.current = true;
     prependingOlderRef.current = true;
-    pendingPrependRef.current = capturePrependScroll(listEl);
     lastOlderLoadAtRef.current = Date.now();
     setLoadingOlder(true);
 
@@ -432,6 +433,9 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         hasMoreOlderRef.current = false;
         return;
       }
+      const listNow = listRef.current;
+      if (!listNow) return;
+      pendingPrependRef.current = capturePrependScroll(listNow);
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id));
         const fresh = batch.filter((m) => !ids.has(m.id));
@@ -542,7 +546,33 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     const list = listRef.current;
     if (!list) return;
 
-    const stick = () => restorePrependScroll(list, pending);
+    let finished = false;
+    let lastHeight = -1;
+    let stableFrames = 0;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      ro.disconnect();
+      window.clearTimeout(maxWait);
+      pendingPrependRef.current = null;
+      prependingOlderRef.current = false;
+      loadingOlderRef.current = false;
+      loadOlderLockRef.current = false;
+      setLoadingOlder(false);
+    };
+
+    const stick = () => {
+      if (finished) return;
+      restorePrependScroll(list, pending);
+      const h = list.scrollHeight;
+      if (h === lastHeight) stableFrames += 1;
+      else {
+        lastHeight = h;
+        stableFrames = 0;
+      }
+      if (stableFrames >= 2) finish();
+    };
 
     stick();
     requestAnimationFrame(stick);
@@ -550,18 +580,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     const ro = new ResizeObserver(() => stick());
     ro.observe(list);
 
-    const done = window.setTimeout(() => {
-      ro.disconnect();
-      pendingPrependRef.current = null;
-      prependingOlderRef.current = false;
-      loadingOlderRef.current = false;
-      loadOlderLockRef.current = false;
-      setLoadingOlder(false);
-    }, 800);
+    const maxWait = window.setTimeout(finish, 1500);
 
     return () => {
-      ro.disconnect();
-      window.clearTimeout(done);
+      if (!finished) {
+        ro.disconnect();
+        window.clearTimeout(maxWait);
+      }
     };
   }, [prependTick]);
 
@@ -625,46 +650,94 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     };
   }, [chatId, refreshUnreadJumpCount, tryMarkReadFromScroll]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loading && messages.length === 0) return;
     if (messages.length === 0) return;
-    if (pendingPrependRef.current || prependingOlderRef.current || loadingOlderRef.current || loadOlderLockRef.current) return;
+    if (!pendingInitialScrollRef.current) return;
+    if (prependingOlderRef.current || loadingOlderRef.current || loadingOlder) return;
 
-    if (pendingInitialScrollRef.current) {
-      if (!user?.id) return;
-      const list = listRef.current;
-      const firstUnread = serverUnreadCount > 0 ? unreadBounds.first : null;
+    const list = listRef.current;
+    if (!list) return;
 
-      const snap = () => {
-        if (!list) return;
-        if (firstUnread) {
-          stickToBottomRef.current = false;
-          scrollListToMessage(list, firstUnread.id, "start", 16);
-        } else {
-          stickToBottomRef.current = true;
-          suppressAutoReadRef.current = false;
-          list.scrollTop = list.scrollHeight;
-        }
-      };
+    const sessionChatId = chatId;
+    const firstUnread = serverUnreadCount > 0 ? unreadBounds.first : null;
 
+    const snap = () => {
+      if (!listRef.current) return;
+      if (firstUnread) {
+        stickToBottomRef.current = false;
+        scrollListToMessage(listRef.current, firstUnread.id, "start", 16);
+      } else {
+        stickToBottomRef.current = true;
+        suppressAutoReadRef.current = false;
+        listRef.current.scrollTop = listRef.current.scrollHeight;
+      }
+    };
+
+    let finished = false;
+    let lastHeight = -1;
+    let stableFrames = 0;
+
+    const finish = () => {
+      if (finished || sessionChatId !== chatId) return;
+      finished = true;
+      ro.disconnect();
+      window.clearTimeout(maxWait);
       snap();
-      requestAnimationFrame(() => {
-        snap();
-        requestAnimationFrame(snap);
-      });
-      const t1 = window.setTimeout(snap, 100);
-      const t2 = window.setTimeout(snap, 400);
-      const t3 = window.setTimeout(() => {
-        snap();
-        pendingInitialScrollRef.current = false;
-        refreshUnreadJumpCount();
-        if (!firstUnread) tryMarkReadFromScroll();
-      }, 900);
-      return () => {
-        window.clearTimeout(t1);
-        window.clearTimeout(t2);
-        window.clearTimeout(t3);
-      };
+      pendingInitialScrollRef.current = false;
+      setMessagesReady(true);
+      refreshUnreadJumpCount();
+      if (!firstUnread) tryMarkReadFromScroll();
+    };
+
+    const onLayout = () => {
+      if (finished || sessionChatId !== chatId) return;
+      snap();
+      const h = list.scrollHeight;
+      if (h === lastHeight) stableFrames += 1;
+      else {
+        lastHeight = h;
+        stableFrames = 0;
+      }
+      if (stableFrames >= 3) finish();
+    };
+
+    snap();
+    requestAnimationFrame(onLayout);
+
+    const ro = new ResizeObserver(() => onLayout());
+    ro.observe(list);
+
+    const maxWait = window.setTimeout(finish, 2800);
+
+    return () => {
+      finished = true;
+      ro.disconnect();
+      window.clearTimeout(maxWait);
+    };
+  }, [
+    chatId,
+    messages,
+    loading,
+    loadingOlder,
+    unreadBounds.first,
+    serverUnreadCount,
+    refreshUnreadJumpCount,
+    tryMarkReadFromScroll,
+  ]);
+
+  useEffect(() => {
+    if (!messagesReady) return;
+    if (loading && messages.length === 0) return;
+    if (messages.length === 0) return;
+    if (
+      pendingPrependRef.current ||
+      prependingOlderRef.current ||
+      loadingOlderRef.current ||
+      loadOlderLockRef.current ||
+      loadingOlder
+    ) {
+      return;
     }
 
     refreshUnreadJumpCount();
@@ -672,7 +745,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     if (stickToBottomRef.current) {
       scrollToBottom(false);
     }
-  }, [messages, loading, scrollToBottom, unreadBounds.first, serverUnreadCount, refreshUnreadJumpCount, tryMarkReadFromScroll]);
+  }, [messages, loading, loadingOlder, messagesReady, scrollToBottom, refreshUnreadJumpCount]);
 
   function dispatchMessage(
     opts: {
@@ -1333,7 +1406,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
           </div>
         )}
       <div
-        className="messages"
+        className={`messages${messagesReady ? " messages-ready" : messages.length > 0 ? " messages-settling" : ""}`}
         ref={listRef}
         onContextMenu={(e) => {
           if (!(e.target as HTMLElement).closest(".message")) e.preventDefault();
@@ -1461,6 +1534,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
               {(m.messageType ?? "text") === "image" && m.attachmentUrl && (
                 <MessageMediaGallery
                   message={m}
+                  priority={msgIndex >= messages.length - 16}
                   onOpenLightbox={(urls, index) => setLightbox({ urls, index })}
                 />
               )}

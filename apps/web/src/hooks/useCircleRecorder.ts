@@ -114,8 +114,7 @@ export function useCircleRecorder() {
         if (e.data.size) chunksRef.current.push(e.data);
       };
       mediaRecorderRef.current = recorder;
-      if (isSafariBrowser()) recorder.start();
-      else recorder.start(250);
+      recorder.start(250);
       setRecording(true);
       setDuration(0);
       const startTime = Date.now();

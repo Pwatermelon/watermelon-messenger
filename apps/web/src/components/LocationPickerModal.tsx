@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { IconLocation } from "./Icons";
+import {
+  loadYandexMaps,
+  YandexMapsKeyMissingError,
+  type YandexMap,
+  type YandexPlacemark,
+} from "../utils/loadYandexMaps";
 
 type Props = {
   onConfirm: (lat: number, lng: number) => void;
@@ -9,12 +13,6 @@ type Props = {
 };
 
 const DEFAULT_CENTER = { lat: 55.751244, lng: 37.618423 };
-
-const PICKER_MARKER = L.divIcon({
-  className: "location-picker-marker",
-  iconSize: [20, 20],
-  iconAnchor: [10, 10],
-});
 
 type MapHandle = {
   setPoint: (lat: number, lng: number, center?: boolean) => void;
@@ -29,59 +27,86 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
   const [mapError, setMapError] = useState("");
 
   useEffect(() => {
-    if (!mapNodeRef.current) return;
+    const mapNode = mapNodeRef.current;
+    if (!mapNode) return;
 
     let destroyed = false;
-    const map = L.map(mapNodeRef.current, { zoomControl: true }).setView(
-      [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng],
-      11
-    );
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(map);
-
-    let marker: L.Marker | null = null;
-
-    const setPoint = (lat: number, lng: number, center = false) => {
-      setCoords({ lat, lng });
-      if (marker) {
-        marker.setLatLng([lat, lng]);
-      } else {
-        marker = L.marker([lat, lng], { draggable: true, icon: PICKER_MARKER }).addTo(map);
-        marker.on("dragend", () => {
-          const p = marker!.getLatLng();
-          setCoords({ lat: p.lat, lng: p.lng });
-        });
-      }
-      if (center) map.setView([lat, lng], 14);
-    };
-
-    map.on("click", (e) => setPoint(e.latlng.lat, e.latlng.lng));
-    mapHandleRef.current = { setPoint };
+    let map: YandexMap | null = null;
+    let placemark: YandexPlacemark | null = null;
 
     const finishInit = (lat: number, lng: number) => {
       if (destroyed) return;
-      setPoint(lat, lng, true);
+      mapHandleRef.current?.setPoint(lat, lng, true);
       setLoading(false);
-      requestAnimationFrame(() => map.invalidateSize());
     };
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => finishInit(pos.coords.latitude, pos.coords.longitude),
-        () => finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
-        { enableHighAccuracy: true, timeout: 12000 }
-      );
-    } else {
-      finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
-    }
+    loadYandexMaps()
+      .then((ymaps) => {
+        if (destroyed || !mapNodeRef.current) return;
+
+        const setPoint = (lat: number, lng: number, center = false) => {
+          const point: [number, number] = [lat, lng];
+          setCoords({ lat, lng });
+          if (placemark) {
+            placemark.geometry.setCoordinates(point);
+          } else if (map) {
+            placemark = new ymaps.Placemark(
+              point,
+              {},
+              { draggable: true, preset: "islands#redCircleDotIcon" }
+            );
+            placemark.events.add("dragend", () => {
+              const [nextLat, nextLng] = placemark!.geometry.getCoordinates();
+              setCoords({ lat: nextLat, lng: nextLng });
+            });
+            map.geoObjects.add(placemark);
+          }
+          if (center && map) map.setCenter(point, 14);
+        };
+
+        map = new ymaps.Map(
+          mapNodeRef.current,
+          {
+            center: [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng],
+            zoom: 11,
+            controls: ["zoomControl"],
+          },
+          { suppressMapOpenBlock: true }
+        );
+
+        map.events.add("click", (e) => {
+          const [lat, lng] = e.get("coords");
+          setPoint(lat, lng);
+        });
+
+        mapHandleRef.current = { setPoint };
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => finishInit(pos.coords.latitude, pos.coords.longitude),
+            () => finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
+            { enableHighAccuracy: true, timeout: 12000 }
+          );
+        } else {
+          finishInit(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        }
+      })
+      .catch((err: unknown) => {
+        if (destroyed) return;
+        if (err instanceof YandexMapsKeyMissingError) {
+          setMapError("Не настроен ключ Яндекс Карт (VITE_YANDEX_MAPS_API_KEY)");
+        } else {
+          setMapError("Не удалось загрузить Яндекс Карты");
+        }
+        setLoading(false);
+      });
 
     return () => {
       destroyed = true;
       mapHandleRef.current = null;
-      map.remove();
+      map?.destroy();
+      map = null;
+      placemark = null;
     };
   }, []);
 
@@ -121,11 +146,12 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
         </button>
         <h3>Выберите точку на карте</h3>
         <p className="location-picker-hint">
-          OpenStreetMap — нажмите на карту, перетащите метку или отправьте своё местоположение
+          Яндекс Карты — нажмите на карту, перетащите метку или отправьте своё местоположение
         </p>
         {mapError ? <p className="location-picker-error">{mapError}</p> : null}
-        <div className="location-picker-map" ref={mapNodeRef} aria-busy={loading}>
+        <div className="location-picker-map-wrap">
           {loading && <div className="location-picker-loading">Загрузка карты…</div>}
+          <div className="location-picker-map" ref={mapNodeRef} aria-busy={loading} />
         </div>
         {coords && (
           <p className="location-picker-coords">
@@ -143,7 +169,7 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
             <button
               type="button"
               className="btn-primary"
-              disabled={!coords || geoLoading}
+              disabled={!coords || geoLoading || !!mapError}
               onClick={() => coords && onConfirm(coords.lat, coords.lng)}
             >
               Отправить
