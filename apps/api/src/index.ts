@@ -4,15 +4,18 @@ import { sql } from "drizzle-orm";
 import { paymentRoutes } from "./routes/payments";
 import { pushRoutes } from "./routes/push";
 import { healthRoutes, incrementRequestCount } from "./routes/health";
+import { metricsRoutes } from "./routes/metrics";
 import { rateLimitPlugin } from "./middleware/rateLimit";
 import { authRoutes } from "./routes/auth";
 import { adminRoutes } from "./routes/admin";
+import { adminObservabilityRoutes } from "./routes/adminObservability";
 import { chatRoutes } from "./routes/chats";
 import { contactRoutes } from "./routes/contacts";
 import { uploadRoutes } from "./routes/upload";
 import { mediaRoutes } from "./routes/media";
 import { wsHandlers, setWSServer, setupRedisSubscriber } from "./ws";
 import { initScylla } from "./services/scylla";
+import { startMetricsRefresh, trackHttpRequest } from "./services/prometheus";
 import { db } from "./db";
 import { validateProductionEnv } from "./lib/envCheck";
 import { e2eRoutes, isE2eEnabled } from "./routes/e2e";
@@ -128,11 +131,14 @@ async function main() {
     console.warn("[Security] MESSAGE_AT_REST_KEY не задан — сообщения хранятся без шифрования at-rest. Задайте ключ в production.");
   }
 
+  startMetricsRefresh();
+
   const app = new Elysia({
     websocket: { perMessageDeflate: false },
   })
     .onRequest(() => {
       incrementRequestCount();
+      trackHttpRequest();
     })
     .onError(({ code, error, set }) => {
       if (error?.message === "Unauthorized") {
@@ -145,10 +151,12 @@ async function main() {
     })
     .use(cors({ origin: true, credentials: true }))
     .use(healthRoutes)
+    .use(metricsRoutes)
     .use(rateLimitPlugin({ prefix: "global", windowSec: 60, max: 300 }))
     .use(rateLimitPlugin({ prefix: "auth", windowSec: 60, max: 30 }))
     .use(authRoutes)
     .use(adminRoutes)
+    .use(adminObservabilityRoutes)
     .use(paymentRoutes)
     .use(pushRoutes)
     .use(isE2eEnabled() ? e2eRoutes : new Elysia())

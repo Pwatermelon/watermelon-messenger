@@ -15,6 +15,7 @@ import { useOverlayDismiss } from "../hooks/useOverlayDismiss";
 
 type Props = {
   onClose: () => void;
+  onOpenAdmin?: () => void;
 };
 
 function SettingsSwitch({
@@ -43,7 +44,7 @@ function SettingsSwitch({
   );
 }
 
-export default function SettingsModal({ onClose }: Props) {
+export default function SettingsModal({ onClose, onOpenAdmin }: Props) {
   const overlayDismiss = useOverlayDismiss(onClose);
   const { user, updateUser, logout, token } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -372,10 +373,17 @@ export default function SettingsModal({ onClose }: Props) {
 
             {user?.isAdmin && (
               <section className="settings-card settings-card-flat">
-                <Link to="/admin" className="settings-row-link" onClick={onClose}>
-                  <span>Beta-доступ (админ)</span>
+                <button
+                  type="button"
+                  className="settings-row-link"
+                  onClick={() => {
+                    onClose();
+                    onOpenAdmin?.();
+                  }}
+                >
+                  <span>Администрирование</span>
                   <span className="settings-row-chevron" aria-hidden>›</span>
-                </Link>
+                </button>
               </section>
             )}
 

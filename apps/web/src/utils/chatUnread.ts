@@ -6,8 +6,13 @@ export type UnreadBounds = {
   count: number;
 };
 
+/** TimeUUID strings compare chronologically when normalized to lowercase hex. */
 export function compareMessageId(a: string, b: string): number {
-  return a.toLowerCase().localeCompare(b.toLowerCase());
+  const na = a.trim().toLowerCase();
+  const nb = b.trim().toLowerCase();
+  if (na < nb) return -1;
+  if (na > nb) return 1;
+  return 0;
 }
 
 export function isCountableMessage(m: Message): boolean {
@@ -76,6 +81,17 @@ export function isMessageBelowViewport(listEl: HTMLElement, messageId: string, m
   if (!el) return false;
   const listBottom = listEl.getBoundingClientRect().bottom - margin;
   return el.getBoundingClientRect().bottom > listBottom;
+}
+
+/** True when any part of the message row intersects the scrollable list viewport. */
+export function isMessageVisibleInViewport(listEl: HTMLElement, messageId: string, margin = 12): boolean {
+  const el = listEl.querySelector(`[data-message-id="${messageId}"]`);
+  if (!el) return false;
+  const listRect = listEl.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const listTop = listRect.top + margin;
+  const listBottom = listRect.bottom - margin;
+  return elRect.bottom > listTop && elRect.top < listBottom;
 }
 
 export function scrollListToMessage(

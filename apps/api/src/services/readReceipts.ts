@@ -23,7 +23,7 @@ export async function getReadCursors(chatId: string): Promise<ReadCursorRow[]> {
   `);
   const list = rowsFromExecute(result);
   return list.map((r) => ({
-    userId: String(r.user_id),
+    userId: String(r.user_id).toLowerCase(),
     lastReadMessageId: String(r.last_read_message_id).trim().toLowerCase(),
   }));
 }

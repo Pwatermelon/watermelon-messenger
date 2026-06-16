@@ -61,15 +61,6 @@ function expandMessage(
   };
 
   if (category === "links") {
-    if (mt === "location") {
-      return [
-        {
-          ...base,
-          messageType: "location",
-          attachmentUrl: row.attachment_url ?? null,
-        },
-      ];
-    }
     const urls = extractUrls(row.content);
     if (urls.length === 0) return [];
     return urls.map((url) => ({
@@ -103,6 +94,7 @@ function expandMessage(
   }
 
   if (category === "media") {
+    if (mt === "circle") return [];
     if (mt === "video") {
       return [
         {

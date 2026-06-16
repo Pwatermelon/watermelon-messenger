@@ -9,7 +9,7 @@ import { eq, and } from "drizzle-orm";
 import * as scylla from "./services/scylla";
 import * as redis from "./services/redis";
 import { notifyChatMembersExcept } from "./services/chatNotifications";
-import { grantMediaFromAttachment } from "./services/mediaAccess";
+import { trackMessageCreated } from "./services/prometheus";
 import { advanceReadCursor } from "./services/chatRead";
 import { incrementUnreadForChat } from "./services/chatUnread";
 import { trackSocket, untrackSocket } from "./wsRegistry";
@@ -212,6 +212,7 @@ export const wsHandlers = {
           await grantMediaFromAttachment(attachmentUrl, chatId, attachmentMetadata ?? null);
           const mt = messageType ?? "text";
           if (mt !== "system") {
+            trackMessageCreated();
             await incrementUnreadForChat(chatId, ws.data.userId).catch((err) => {
               console.warn("[WS] incrementUnread failed:", err);
             });
@@ -267,6 +268,10 @@ export const wsHandlers = {
         const { chatId, messageId } = msg;
         if (!chatId) {
           send(ws, { type: "error", error: "chatId required" });
+          return;
+        }
+        if (!messageId?.trim()) {
+          send(ws, { type: "error", error: "messageId required" });
           return;
         }
         const [member] = await db

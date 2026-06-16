@@ -5,8 +5,7 @@ type BrandIconProps = {
 };
 
 function iconSrcForSize(size: number): string {
-  if (size <= 32) return "/icon-32.png";
-  if (size <= 48) return "/icon-48.png";
+  if (size <= 64) return "/icon-180.png";
   if (size <= 180) return "/icon-180.png";
   if (size <= 192) return "/icon-192.png";
   if (size <= 200) return "/icon-200.png";

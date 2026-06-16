@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAdminUsers, approveUser, revokeUser, type AdminUser } from "../api";
 import { BrandIcon } from "../components/BrandIcon";
-import { logoutViaYandex } from "../lib/yandexLogout";
 
-export default function AdminPanel() {
-  const { user, logout } = useAuth();
+type Props = {
+  embedded?: boolean;
+};
+
+export default function AdminPanel({ embedded = false }: Props) {
+  const { user } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -64,34 +66,34 @@ export default function AdminPanel() {
   }, [users]);
 
   if (!user?.isAdmin) {
+    if (embedded) {
+      return <p className="admin-console-muted">Нет доступа</p>;
+    }
     return (
       <div className="admin-page">
         <div className="admin-denied">
           <h1>Нет доступа</h1>
           <p>Эта панель только для администраторов.</p>
-          <Link to="/">На главную</Link>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="admin-page">
-      <header className="admin-header">
-        <div>
-          <h1 className="admin-title">
-            <BrandIcon size={32} className="admin-brand-icon" />
-            Beta-доступ
-          </h1>
-          <p>Заявки пользователей Яндекс ID — только логины</p>
-        </div>
-        <div className="admin-header-actions">
-          <Link to="/" className="admin-link">Мессенджер</Link>
-          <button type="button" onClick={() => logoutViaYandex(logout)}>Выйти</button>
-        </div>
-      </header>
+  const content = (
+    <>
+      {!embedded && (
+        <header className="admin-header">
+          <div>
+            <h1 className="admin-title">
+              <BrandIcon size={32} className="admin-brand-icon" />
+              Beta-доступ
+            </h1>
+            <p>Заявки пользователей Яндекс ID — только логины</p>
+          </div>
+        </header>
+      )}
 
-      <div className="admin-search-wrap">
+      <div className={embedded ? "admin-embedded-search-wrap" : "admin-search-wrap"}>
         <input
           type="search"
           className="admin-search"
@@ -147,8 +149,12 @@ export default function AdminPanel() {
           </section>
         </>
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return <div className="admin-embedded">{content}</div>;
+
+  return <div className="admin-page">{content}</div>;
 }
 
 function AdminUserRow({

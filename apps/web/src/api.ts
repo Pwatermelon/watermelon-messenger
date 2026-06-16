@@ -302,14 +302,15 @@ export interface MessageItem {
 
 export type ReadCursor = { userId: string; lastReadMessageId: string };
 
-export async function markChatReadApi(chatId: string, messageId?: string): Promise<void> {
+export async function markChatReadApi(chatId: string, messageId: string): Promise<void> {
+  const normalized = messageId.trim().toLowerCase();
   const res = await fetch(`${getApiUrl()}/chats/${encodeURIComponent(chatId)}/read`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    body: JSON.stringify(messageId ? { messageId } : {}),
+    body: JSON.stringify({ messageId: normalized }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -466,6 +467,37 @@ export async function revokeUser(userId: string): Promise<void> {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error ?? "Failed");
+  }
+}
+
+export type GrafanaDashboard = {
+  uid: string;
+  title: string;
+  embedPath: string;
+};
+
+export async function getGrafanaDashboards(): Promise<GrafanaDashboard[]> {
+  const res = await fetch(`${getApiUrl()}/admin/observability/dashboards`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Forbidden");
+  }
+  const data = (await res.json()) as { dashboards?: GrafanaDashboard[] };
+  return data.dashboards ?? [];
+}
+
+export async function prepareGrafanaSession(): Promise<void> {
+  const res = await fetch(`${getApiUrl()}/admin/observability/session`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getToken()}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Forbidden");
   }
 }
 

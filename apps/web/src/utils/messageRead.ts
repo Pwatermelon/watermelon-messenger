@@ -15,15 +15,21 @@ export type MessageReader = {
   avatarUrl?: string | null;
 };
 
+function readCursorForUser(readCursors: Record<string, string>, userId: string): string | undefined {
+  return readCursors[userId] ?? readCursors[userId.toLowerCase()];
+}
+
+/** Peers who read the message; the sender is never counted as a reader. */
 export function getMessageReaders(
   messageId: string,
+  senderId: string,
   members: User[],
-  readCursors: Record<string, string>,
-  excludeUserId?: string
+  readCursors: Record<string, string>
 ): MessageReader[] {
+  const senderKey = senderId.toLowerCase();
   return members
-    .filter((m) => m.id !== excludeUserId)
-    .filter((m) => isMessageReadByCursor(messageId, readCursors[m.id]))
+    .filter((m) => m.id.toLowerCase() !== senderKey)
+    .filter((m) => isMessageReadByCursor(messageId, readCursorForUser(readCursors, m.id)))
     .map((m) => ({
       id: m.id,
       username: m.username,
@@ -33,9 +39,9 @@ export function getMessageReaders(
 
 export function isMessageReadByAnyPeer(
   messageId: string,
+  senderId: string,
   members: User[],
-  readCursors: Record<string, string>,
-  excludeUserId?: string
+  readCursors: Record<string, string>
 ): boolean {
-  return getMessageReaders(messageId, members, readCursors, excludeUserId).length > 0;
+  return getMessageReaders(messageId, senderId, members, readCursors).length > 0;
 }

@@ -1156,6 +1156,17 @@ a {
   color: var(--muted);
 }
 
+.chat-info-footer {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.chat-info-footer .contact-info-remove-btn {
+  width: 100%;
+  margin-top: 0;
+}
+
 .chat-info-tabs {
   display: flex;
   gap: 0;
@@ -1341,6 +1352,59 @@ a {
 
 .lightbox-nested {
   z-index: 1101;
+}
+
+.circle-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1102;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  cursor: pointer;
+}
+
+.circle-lightbox-nested {
+  z-index: 1102;
+}
+
+.circle-lightbox-body {
+  cursor: default;
+}
+
+.chat-info-circle-preview {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg);
+  display: block;
+}
+
+.chat-info-circle-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.chat-info-circle-preview .chat-info-media-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 1.5rem;
+  pointer-events: none;
 }
 
 .lightbox-video {
@@ -1752,51 +1816,52 @@ a {
   background: rgba(232, 72, 85, 0.12);
 }
 
-.message-context-submenu-wrap {
-  position: relative;
-}
-
-.message-context-menu-item-submenu {
+.message-context-menu-item-expand {
   justify-content: space-between;
 }
 
-.message-context-submenu-arrow {
+.message-context-expand-arrow {
   opacity: 0.55;
   font-size: 1.1rem;
   line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
 }
 
-.message-context-submenu {
-  position: absolute;
-  left: calc(100% + 6px);
-  top: 0;
-  min-width: 180px;
-  max-width: 240px;
-  max-height: 220px;
+.message-context-expand-arrow-open {
+  transform: rotate(90deg);
+}
+
+.message-context-viewers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-height: 200px;
   overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-  padding: 0.35rem;
-  z-index: 2;
+  padding: 0 0.35rem 0.3rem;
+  margin-top: -0.05rem;
 }
 
-.message-context-submenu-item {
+.message-context-viewers-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.5rem;
+  border-radius: 8px;
   font-size: 0.9rem;
 }
 
-.message-context-submenu-empty {
-  padding: 0.5rem 0.65rem;
+.message-context-viewers-item:hover {
+  background: var(--bg);
+}
+
+.message-context-viewers-empty {
+  padding: 0.45rem 0.65rem;
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-.message-context-submenu-avatar {
+.message-context-viewers-avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -1810,10 +1875,16 @@ a {
   font-weight: 700;
 }
 
-.message-context-submenu-avatar img {
+.message-context-viewers-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.message-context-viewers-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .messages-date-divider {
@@ -2346,11 +2417,17 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  width: 100%;
   padding: 0.75rem 1rem;
   color: var(--text);
   text-decoration: none;
   font-size: 0.95rem;
   font-weight: 500;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
   border-radius: var(--radius);
   transition: background 0.15s;
 }
@@ -2764,6 +2841,10 @@ a {
   justify-content: center;
   z-index: 100;
   padding: 1rem;
+}
+
+.modal-overlay-top {
+  z-index: 1200;
 }
 
 .search-modal {
@@ -4055,6 +4136,7 @@ a {
   flex-shrink: 0;
   object-fit: contain;
   aspect-ratio: 1 / 1;
+  background: transparent;
 }
 
 /* ── Settings tier ── */
@@ -4434,6 +4516,145 @@ a {
 .admin-denied {
   text-align: center;
   padding: 4rem 2rem;
+}
+
+.admin-console-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.admin-console-modal {
+  width: min(1200px, 100%);
+  max-height: 92vh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.admin-console-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-console-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-console-title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.admin-console-subtitle {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.admin-console-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-console-tab {
+  padding: 0.65rem 1rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.admin-console-tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.admin-console-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.admin-embedded .admin-section h2 {
+  font-size: 1rem;
+}
+
+.admin-embedded-search-wrap {
+  margin-bottom: 0.75rem;
+}
+
+.admin-console-muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-console-error {
+  color: var(--danger);
+  margin: 0 0 0.75rem;
+}
+
+.admin-console-error-wrap {
+  padding: 0.5rem 0;
+}
+
+.admin-monitoring {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 60vh;
+}
+
+.admin-monitoring-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.admin-monitoring-tab {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.admin-monitoring-tab-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.admin-monitoring-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #111;
 }
 
 .settings-admin-link {

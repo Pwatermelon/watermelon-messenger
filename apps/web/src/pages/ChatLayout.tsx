@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import SettingsModal from "../components/SettingsModal";
+import AdminConsoleModal from "../components/AdminConsoleModal";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketContext } from "../context/WebSocketContext";
 import { useActiveChat } from "../context/ActiveChatContext";
@@ -46,6 +47,7 @@ export default function ChatLayout() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminConsoleOpen, setAdminConsoleOpen] = useState(false);
   const [newChatMenuOpen, setNewChatMenuOpen] = useState(false);
   const [dmOpen, setDmOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
@@ -568,7 +570,13 @@ export default function ChatLayout() {
         )}
       </main>
 
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          onOpenAdmin={() => setAdminConsoleOpen(true)}
+        />
+      )}
+      {adminConsoleOpen && <AdminConsoleModal open onClose={() => setAdminConsoleOpen(false)} />}
 
       {profileUserId !== undefined && (
         <Profile

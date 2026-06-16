@@ -2,17 +2,23 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type RefOb
 import type { Chat, ChatSharedCategory, ChatSharedItem, User } from "@melon/shared";
 import BirthdayInfoBlock from "./BirthdayInfoBlock";
 import MediaLightbox, { type MediaLightboxItem } from "./MediaLightbox";
+import CircleLightbox from "./CircleLightbox";
 import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
-import { CircleMessagePlayer } from "./CircleMessagePlayer";
 import { IconBell, IconBellOff, IconFile } from "./Icons";
 import { getChatShared, updateChatNotifications } from "../api";
 import { mediaDownloadUrl, mediaUrl } from "../utils/mediaUrl";
-import { parseLocationCoords } from "../utils/yandexMaps";
 
 type TabId = "participants" | ChatSharedCategory;
 
-const TABS: { id: TabId; label: string }[] = [
+const GROUP_TABS: { id: TabId; label: string }[] = [
   { id: "participants", label: "Участники" },
+  { id: "media", label: "Медиа" },
+  { id: "files", label: "Файлы" },
+  { id: "links", label: "Ссылки" },
+  { id: "voice", label: "Голосовые" },
+];
+
+const DM_TABS: { id: ChatSharedCategory; label: string }[] = [
   { id: "media", label: "Медиа" },
   { id: "files", label: "Файлы" },
   { id: "links", label: "Ссылки" },
@@ -47,8 +53,14 @@ function formatSharedDate(iso: string): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function isCircleItem(item: ChatSharedItem): boolean {
+  if (item.messageType === "circle") return true;
+  const url = item.attachmentUrl ?? "";
+  return /circle\.(webm|mp4|mov)$/i.test(url);
+}
+
 function sharedItemToMedia(item: ChatSharedItem): MediaLightboxItem | null {
-  if (!item.attachmentUrl) return null;
+  if (!item.attachmentUrl || isCircleItem(item)) return null;
   const url = mediaUrl(item.attachmentUrl);
   if (item.messageType === "video") return { url, kind: "video" };
   if (item.messageType === "image") return { url, kind: "image" };
@@ -76,17 +88,20 @@ export default function ChatInfoModal({
   onRequestDeleteChat,
   onLeaveGroup,
 }: Props) {
-  const [tab, setTab] = useState<TabId>("participants");
+  const isGroup = chat.type === "group";
+  const tabs = isGroup ? GROUP_TABS : DM_TABS;
+  const defaultTab: TabId = isGroup ? "participants" : "media";
+  const headerTitle = isGroup ? (chat.name ?? "Группа") : (otherMember?.username ?? "Чат");
+  const memberCount = chat.members.length;
+
+  const [tab, setTab] = useState<TabId>(defaultTab);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [muteBusy, setMuteBusy] = useState(false);
   const [sharedByTab, setSharedByTab] = useState<Partial<Record<ChatSharedCategory, ChatSharedItem[]>>>({});
   const [hasMoreByTab, setHasMoreByTab] = useState<Partial<Record<ChatSharedCategory, boolean>>>({});
   const [loadingTab, setLoadingTab] = useState<ChatSharedCategory | null>(null);
   const [lightbox, setLightbox] = useState<{ items: MediaLightboxItem[]; index: number } | null>(null);
-
-  const isGroup = chat.type === "group";
-  const headerTitle = isGroup ? (chat.name ?? "Группа") : (otherMember?.username ?? "Чат");
-  const memberCount = chat.members.length;
+  const [circleLightbox, setCircleLightbox] = useState<{ src: string; duration?: number } | null>(null);
 
   const resetShared = useCallback(() => {
     setSharedByTab({});
@@ -96,12 +111,14 @@ export default function ChatInfoModal({
 
   useEffect(() => {
     if (!open) {
-      setTab("participants");
       setSelectedMemberId(null);
       setLightbox(null);
+      setCircleLightbox(null);
       resetShared();
+      return;
     }
-  }, [open, resetShared]);
+    setTab(defaultTab);
+  }, [open, resetShared, defaultTab, chat.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -111,12 +128,16 @@ export default function ChatInfoModal({
         setLightbox(null);
         return;
       }
+      if (circleLightbox) {
+        setCircleLightbox(null);
+        return;
+      }
       if (selectedMemberId) setSelectedMemberId(null);
       else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, selectedMemberId, lightbox, onClose]);
+  }, [open, selectedMemberId, lightbox, circleLightbox, onClose]);
 
   const loadShared = useCallback(async (category: ChatSharedCategory, before?: string) => {
     setLoadingTab(category);
@@ -221,58 +242,14 @@ export default function ChatInfoModal({
     }
 
     if (!isGroup && otherMember) {
-      return (
-        <>
-          <div className="contact-info-avatar-wrap">
-            {otherMember.avatarUrl ? (
-              <img src={mediaUrl(otherMember.avatarUrl)} alt="" className="contact-info-avatar" />
-            ) : (
-              <div className="contact-info-avatar-placeholder">
-                {(otherMember.username ?? "?").slice(0, 1).toUpperCase()}
-              </div>
-            )}
-          </div>
-          {otherMember.birthdayLabel && (
-            <BirthdayInfoBlock
-              label={otherMember.birthdayLabel}
-              age={otherMember.birthdayAge}
-              isToday={otherMember.isBirthdayToday}
-              compact
-            />
-          )}
-          {otherMember.yandexLogin && (
-            <div className="contact-info-id-block">
-              <span className="contact-info-label">Логин</span>
-              <code className="contact-info-code">{otherMember.yandexLogin}</code>
-            </div>
-          )}
-          <button
-            type="button"
-            className="contact-info-profile-btn"
-            onClick={() => {
-              onClose();
-              openProfile(otherMember.id);
-            }}
-          >
-            Открыть профиль
-          </button>
-          <button type="button" className="contact-info-remove-btn" onClick={onRequestDeleteChat}>
-            Удалить чат
-          </button>
-        </>
-      );
+      return null;
     }
 
     if (!isGroup) {
       return (
-        <>
-          <p className="contact-info-muted" style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-            Собеседник недоступен. Вы можете удалить этот чат.
-          </p>
-          <button type="button" className="contact-info-remove-btn" onClick={onRequestDeleteChat}>
-            Удалить чат
-          </button>
-        </>
+        <p className="contact-info-muted chat-info-empty">
+          Собеседник недоступен. Вы можете удалить этот чат.
+        </p>
       );
     }
 
@@ -374,6 +351,8 @@ export default function ChatInfoModal({
             const url = item.attachmentUrl ? mediaUrl(item.attachmentUrl) : "";
             if (!url) return null;
             const isVideo = item.messageType === "video";
+            const isCircle = isCircleItem(item);
+            if (isCircle) return null;
             return (
               <button
                 key={`${item.messageId}-${i}`}
@@ -457,21 +436,6 @@ export default function ChatInfoModal({
       <>
         <ul className="chat-info-link-list">
           {items.map((item, i) => {
-            if (item.messageType === "location") {
-              const coords = parseLocationCoords(item.content, item.attachmentMetadata ?? undefined);
-              const href =
-                coords != null
-                  ? `https://yandex.ru/maps/?pt=${coords.lng},${coords.lat}&z=16&l=map`
-                  : item.content;
-              return (
-                <li key={`${item.messageId}-${i}`} className="chat-info-link-item">
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="chat-info-link">
-                    {item.content || "Геопозиция"}
-                  </a>
-                  <span className="chat-info-file-date">{formatSharedDate(item.createdAt)}</span>
-                </li>
-              );
-            }
             const url = item.links?.[0] ?? item.content;
             return (
               <li key={`${item.messageId}-${i}`} className="chat-info-link-item">
@@ -516,7 +480,22 @@ export default function ChatInfoModal({
                   <span className="chat-info-file-date">{formatSharedDate(item.createdAt)}</span>
                 </div>
                 {item.messageType === "circle" ? (
-                  <CircleMessagePlayer src={src} duration={item.attachmentMetadata?.duration} />
+                  <button
+                    type="button"
+                    className="chat-info-circle-preview"
+                    onClick={() =>
+                      setCircleLightbox({
+                        src,
+                        duration: item.attachmentMetadata?.duration,
+                      })
+                    }
+                    aria-label="Открыть кружок"
+                  >
+                    <video src={src} muted preload="metadata" className="chat-info-circle-thumb" playsInline />
+                    <span className="chat-info-media-play" aria-hidden>
+                      ▶
+                    </span>
+                  </button>
                 ) : (
                   <VoiceMessagePlayer src={src} duration={item.attachmentMetadata?.duration} />
                 )}
@@ -566,6 +545,17 @@ export default function ChatInfoModal({
             )}
           </div>
           <p className="chat-info-header-title">{headerTitle}</p>
+          {!isGroup && otherMember?.birthdayLabel && (
+            <BirthdayInfoBlock
+              label={otherMember.birthdayLabel}
+              age={otherMember.birthdayAge}
+              isToday={otherMember.isBirthdayToday}
+              compact
+            />
+          )}
+          {!isGroup && otherMember?.yandexLogin && (
+            <p className="chat-info-header-sub">@{otherMember.yandexLogin}</p>
+          )}
           {isGroup && (
             <p className="chat-info-header-sub">
               {memberCount} {memberCount === 1 ? "участник" : memberCount < 5 ? "участника" : "участников"}
@@ -574,6 +564,18 @@ export default function ChatInfoModal({
         </div>
 
         <div className="chat-info-actions">
+          {!isGroup && otherMember && (
+            <button
+              type="button"
+              className="chat-info-action"
+              onClick={() => {
+                onClose();
+                openProfile(otherMember.id);
+              }}
+            >
+              Профиль
+            </button>
+          )}
           <button
             type="button"
             className={`chat-info-action${notificationsMuted ? " chat-info-action-muted" : ""}`}
@@ -587,7 +589,7 @@ export default function ChatInfoModal({
         </div>
 
         <div className="chat-info-tabs" role="tablist" aria-label="Разделы чата">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -609,8 +611,25 @@ export default function ChatInfoModal({
           {tab === "voice" && renderVoiceTab()}
         </div>
 
+        {!isGroup && (
+          <div className="chat-info-footer">
+            <button type="button" className="contact-info-remove-btn" onClick={onRequestDeleteChat}>
+              Удалить чат
+            </button>
+          </div>
+        )}
+
         {lightbox && (
           <MediaLightbox items={lightbox.items} initialIndex={lightbox.index} onClose={() => setLightbox(null)} nested />
+        )}
+
+        {circleLightbox && (
+          <CircleLightbox
+            src={circleLightbox.src}
+            duration={circleLightbox.duration}
+            onClose={() => setCircleLightbox(null)}
+            nested
+          />
         )}
       </div>
     </div>

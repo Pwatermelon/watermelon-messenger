@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 export type MediaLightboxItem = {
   url: string;
   kind: "image" | "video";
+  duration?: number;
 };
 
 type Props = {
@@ -94,6 +95,8 @@ export default function MediaLightbox({
               controls
               autoPlay
               playsInline
+              disablePictureInPicture
+              controlsList="nodownload noplaybackrate"
             />
           ) : (
             <img src={current.url} alt="" className="lightbox-img" />

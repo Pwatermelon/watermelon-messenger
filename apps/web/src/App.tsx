@@ -6,7 +6,6 @@ import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import BetaWelcome from "./pages/BetaWelcome";
 import BetaPending from "./pages/BetaPending";
-import AdminPanel from "./pages/AdminPanel";
 import Platinum from "./pages/Platinum";
 import ChatLayout from "./pages/ChatLayout";
 import ChatLegacyRedirect from "./pages/ChatLegacyRedirect";
@@ -46,7 +45,7 @@ export default function App() {
 
       <Route path="/beta/pending" element={<AuthRequired><BetaPending /></AuthRequired>} />
       <Route path="/beta/welcome" element={<AuthRequired><BetaWelcome /></AuthRequired>} />
-      <Route path="/admin" element={<AuthRequired><AdminPanel /></AuthRequired>} />
+      <Route path="/admin" element={<Navigate to="/" replace />} />
 
       <Route element={<AuthRequired><MessengerLayout /></AuthRequired>}>
         <Route path="/" element={<ChatLayout />} />

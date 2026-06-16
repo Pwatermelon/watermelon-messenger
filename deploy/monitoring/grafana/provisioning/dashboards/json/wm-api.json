@@ -1,0 +1,69 @@
+{
+  "uid": "wm-api",
+  "title": "Watermelon — API",
+  "tags": ["watermelon", "api"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP запросы / сек",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(wm_http_requests_total[5m])",
+          "legendFormat": "RPS",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 20 } } }
+    },
+    {
+      "type": "stat",
+      "title": "Всего HTTP запросов",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "wm_http_requests_total", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Uptime процесса",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "wm_process_uptime_seconds", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Память процесса API",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "wm_process_resident_memory_bytes", "legendFormat": "RSS", "refId": "A" },
+        { "expr": "wm_process_heap_bytes", "legendFormat": "heap", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 15 } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Event loop / CPU процесса",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "rate(wm_process_cpu_seconds_total[5m])", "legendFormat": "CPU cores", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line" } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "WebSocket соединения",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "wm_ws_connections", "legendFormat": "connections", "refId": "A" },
+        { "expr": "wm_ws_users_online", "legendFormat": "users", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 15 } } }
+    }
+  ]
+}

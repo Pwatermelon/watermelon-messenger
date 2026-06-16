@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useVoiceRecorder } from "../hooks/useVoiceRecorder";
 import { useCircleRecorder } from "../hooks/useCircleRecorder";
-import { IconCircle, IconMic, IconTrash } from "./Icons";
+import { IconCircle, IconMic, IconSend } from "./Icons";
 import { shouldAcquireMediaEarly, type RecordMediaKind } from "../utils/mediaAccess";
 
 type RecordMode = "voice" | "circle";
@@ -47,6 +47,7 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
   const lockedRef = useRef(false);
   const disabledRef = useRef(false);
   const modeRef = useRef(mode);
+  const recordingRef = useRef(false);
 
   const activeMode = mode;
   const recording = activeMode === "voice" ? voice.recording : circle.recording;
@@ -70,6 +71,9 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+  useEffect(() => {
+    recordingRef.current = voice.recording || circle.recording;
+  }, [voice.recording, circle.recording]);
 
   useEffect(() => {
     const el = previewRef.current;
@@ -207,20 +211,25 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
     }
 
     const g = gestureRef.current;
+    const isRecording = recordingStartedRef.current || recordingRef.current;
+
     if (g === "cancel") {
       cancelRecording();
       return;
     }
-    if (g === "lock") {
+    if (g === "lock" && isRecording) {
       setLocked(true);
       lockedRef.current = true;
       setGesture("none");
       holdActivatedRef.current = false;
       return;
     }
-    if (recordingStartedRef.current && !lockedRef.current) {
+    if (isRecording && !lockedRef.current) {
       await finishSend();
-    } else if (holdActivatedRef.current) {
+      holdActivatedRef.current = false;
+      return;
+    }
+    if (holdActivatedRef.current) {
       cancelRecording();
     }
     holdActivatedRef.current = false;
@@ -378,28 +387,16 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
         <span className="compose-record-error" role="alert">{recordError}</span>
       )}
       {locked ? (
-        <div className="compose-record-locked-actions">
-          <button
-            type="button"
-            className="compose-btn compose-btn-icon compose-btn-record-cancel"
-            onClick={cancelRecording}
-            disabled={disabled}
-            aria-label="Отмена"
-            title="Отмена"
-          >
-            <IconTrash size={20} />
-          </button>
-          <button
-            type="button"
-            className="compose-btn compose-btn-icon compose-btn-record-stop"
-            onClick={() => void finishSend()}
-            disabled={disabled}
-            aria-label="Отправить"
-            title="Отправить"
-          >
-            {duration}s
-          </button>
-        </div>
+        <button
+          type="button"
+          className="compose-btn compose-btn-icon compose-btn-record-stop"
+          onClick={() => void finishSend()}
+          disabled={disabled}
+          aria-label="Отправить"
+          title="Отправить"
+        >
+          <IconSend size={20} />
+        </button>
       ) : (
         <button
           ref={btnRef}

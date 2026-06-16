@@ -24,7 +24,7 @@ import {
 import { getReadCursors, getUserReadCursorsByChat } from "../services/readReceipts";
 import { advanceReadCursor } from "../services/chatRead";
 import { resolveUnreadCount, incrementUnreadForChat } from "../services/chatUnread";
-import { getReactionsForMessages, setMessageReaction } from "../services/reactions";
+import { trackMessageCreated } from "../services/prometheus";
 
 function toUser(u: typeof users.$inferSelect) {
   return toPublicProfile(u);
@@ -573,6 +573,11 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
     const u = requireAuth(set)(user);
     const { id: chatId } = params;
     const payload = (typeof body === "object" && body !== null ? body : {}) as { messageId?: string };
+    const messageId = payload.messageId?.trim();
+    if (!messageId) {
+      set.status = 400;
+      return { error: "messageId required" };
+    }
     const [member] = await db
       .select()
       .from(chatMembers)
@@ -582,16 +587,16 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       set.status = 403;
       return { error: "Not a member of this chat" };
     }
-    const { advanced, messageId } = await advanceReadCursor(chatId, u.id, payload.messageId);
-    if (advanced && messageId) {
+    const { advanced, messageId: resolvedId } = await advanceReadCursor(chatId, u.id, messageId);
+    if (advanced && resolvedId) {
       await publishChatEvent(chatId, {
         type: "read_receipt",
         chatId,
         userId: u.id,
-        messageId,
+        messageId: resolvedId,
       });
     }
-    return { ok: true, messageId };
+    return { ok: true, messageId: resolvedId };
   })
   .get("/:id/messages", async ({ user, params, query, set }) => {
     const u = requireAuth(set)(user);
@@ -776,6 +781,7 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       attachmentUrl,
       attachmentMetadata,
     });
+    trackMessageCreated();
     await grantMediaFromAttachment(attachmentUrl, targetChatId, attachmentMetadata);
     const [senderUser] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
     const sender = senderUser ? await signUserMedia(toUser(senderUser), u.id) : undefined;

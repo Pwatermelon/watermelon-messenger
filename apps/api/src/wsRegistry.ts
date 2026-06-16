@@ -39,3 +39,9 @@ export function kickUserFromChat(userId: string, chatId: string, payload: WSServ
     }
   }
 }
+
+export function getWsStats(): { connections: number; users: number } {
+  let connections = 0;
+  for (const set of byUser.values()) connections += set.size;
+  return { connections, users: byUser.size };
+}

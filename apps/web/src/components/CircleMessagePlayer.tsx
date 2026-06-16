@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconPlay, IconPause } from "./Icons";
 import { canPlayMediaUrl } from "../utils/mediaMime";
 import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback";
 
-const OUTER = 220;
-const RING = 5;
-const RING_HIT = 28;
-const R = (OUTER - RING) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * R;
+const DEFAULT_SIZE = 220;
+
+function circleMetrics(outer: number) {
+  const ring = 5;
+  const ringHit = 28;
+  const r = (outer - ring) / 2;
+  return { outer, ring, ringHit, r, circumference: 2 * Math.PI * r };
+}
 
 type Props = {
   src: string;
   duration?: number;
+  size?: number;
 };
 
 function formatTime(sec: number): string {
@@ -27,7 +31,10 @@ function angleFromPointer(clientX: number, clientY: number, rect: DOMRect): numb
   return angle / (Math.PI * 2);
 }
 
-export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
+export function CircleMessagePlayer({ src, duration: metaDuration, size = DEFAULT_SIZE }: Props) {
+  const { outer, ring, ringHit, r, circumference } = useMemo(() => circleMetrics(size), [size]);
+  const cx = outer / 2;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const ringRef = useRef<SVGSVGElement>(null);
   const scrubbingRef = useRef(false);
@@ -207,11 +214,10 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
     document.addEventListener("pointercancel", scrubHandlersRef.current.onUp, { passive: false });
   }
 
-  const offset = CIRCUMFERENCE * (1 - progress);
-  const cx = OUTER / 2;
+  const offset = circumference * (1 - progress);
 
   return (
-    <div className="circle-player" style={{ width: OUTER, height: OUTER }}>
+    <div className="circle-player" style={{ width: outer, height: outer }}>
       <button
         type="button"
         className="circle-player-video-btn"
@@ -226,6 +232,10 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
           playsInline
           preload="metadata"
           muted={false}
+          disablePictureInPicture
+          controls={false}
+          controlsList="nodownload nofullscreen noremoteplayback"
+          onContextMenu={(e) => e.preventDefault()}
         />
         <span className={`circle-player-overlay${playing ? " is-playing" : ""}`}>
           {unsupported ? (
@@ -242,29 +252,29 @@ export function CircleMessagePlayer({ src, duration: metaDuration }: Props) {
       <svg
         ref={ringRef}
         className="circle-player-ring"
-        width={OUTER}
-        height={OUTER}
-        viewBox={`0 0 ${OUTER} ${OUTER}`}
+        width={outer}
+        height={outer}
+        viewBox={`0 0 ${outer} ${outer}`}
         aria-hidden
       >
         <circle
           cx={cx}
           cy={cx}
-          r={R}
+          r={r}
           className="circle-player-ring-hit"
           fill="none"
-          strokeWidth={RING_HIT}
+          strokeWidth={ringHit}
           onPointerDown={handleRingPointerDown}
         />
-        <circle cx={cx} cy={cx} r={R} className="circle-player-ring-bg" fill="none" strokeWidth={RING} />
+        <circle cx={cx} cy={cx} r={r} className="circle-player-ring-bg" fill="none" strokeWidth={ring} />
         <circle
           cx={cx}
           cy={cx}
-          r={R}
+          r={r}
           className="circle-player-ring-progress"
           fill="none"
-          strokeWidth={RING}
-          strokeDasharray={CIRCUMFERENCE}
+          strokeWidth={ring}
+          strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
           transform={`rotate(-90 ${cx} ${cx})`}

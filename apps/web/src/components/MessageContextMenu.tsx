@@ -8,6 +8,7 @@ export const QUICK_REACTIONS = ["👍", "❤️", "🔥", "🥰", "👏", "😁"
 type Props = {
   x: number;
   y: number;
+  showViewers?: boolean;
   readers: MessageReader[];
   canDownload: boolean;
   onReply: () => void;
@@ -21,6 +22,7 @@ type Props = {
 export function MessageContextMenu({
   x,
   y,
+  showViewers = false,
   readers,
   canDownload,
   onReply,
@@ -69,14 +71,14 @@ export function MessageContextMenu({
     if (top < pad) top = pad;
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
-  }, [x, y, viewersOpen]);
+  }, [x, y, viewersOpen, showViewers, readers.length]);
 
   const viewersLabel =
     readers.length === 0
       ? "Просмотрено"
       : readers.length === 1
-      ? "Просмотрено · 1"
-      : `Просмотрено · ${readers.length}`;
+        ? "Просмотрено · 1"
+        : `Просмотрено · ${readers.length}`;
 
   return (
     <div
@@ -122,43 +124,41 @@ export function MessageContextMenu({
         </button>
       )}
 
-      <div className="message-context-menu-divider" />
+      {showViewers && (
+        <>
+          <div className="message-context-menu-divider" />
 
-      <div
-        className="message-context-submenu-wrap"
-        onMouseEnter={() => setViewersOpen(true)}
-        onMouseLeave={() => setViewersOpen(false)}
-      >
-        <button
-          type="button"
-          className="message-context-menu-item message-context-menu-item-submenu"
-          onClick={() => setViewersOpen((o) => !o)}
-          role="menuitem"
-          aria-haspopup="true"
-          aria-expanded={viewersOpen}
-        >
-          <span>{viewersLabel}</span>
-          <span className="message-context-submenu-arrow" aria-hidden>
-            ›
-          </span>
-        </button>
-        {viewersOpen && (
-          <div className="message-context-submenu" role="menu">
-            {readers.length === 0 ? (
-              <div className="message-context-submenu-empty">Пока никто не просмотрел</div>
-            ) : (
-              readers.map((r) => (
-                <div key={r.id} className="message-context-submenu-item">
-                  <span className="message-context-submenu-avatar">
-                    {r.avatarUrl ? <img src={mediaUrl(r.avatarUrl)} alt="" /> : r.username.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>{r.username}</span>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+          <button
+            type="button"
+            className="message-context-menu-item message-context-menu-item-expand"
+            onClick={() => setViewersOpen((o) => !o)}
+            role="menuitem"
+            aria-expanded={viewersOpen}
+          >
+            <span>{viewersLabel}</span>
+            <span className={`message-context-expand-arrow${viewersOpen ? " message-context-expand-arrow-open" : ""}`} aria-hidden>
+              ›
+            </span>
+          </button>
+
+          {viewersOpen && (
+            <div className="message-context-viewers-list" role="group" aria-label="Кто просмотрел">
+              {readers.length === 0 ? (
+                <div className="message-context-viewers-empty">Пока никто не просмотрел</div>
+              ) : (
+                readers.map((r) => (
+                  <div key={r.id} className="message-context-viewers-item">
+                    <span className="message-context-viewers-avatar">
+                      {r.avatarUrl ? <img src={mediaUrl(r.avatarUrl)} alt="" /> : r.username.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="message-context-viewers-name">{r.username}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

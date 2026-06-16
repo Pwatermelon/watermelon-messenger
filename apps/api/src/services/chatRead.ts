@@ -1,4 +1,4 @@
-import { getMessages as scyllaGetMessages } from "./scylla";
+import { getMessage as scyllaGetMessage } from "./scylla";
 import { upsertReadCursor } from "./readReceipts";
 import { resetUnreadCount } from "./chatUnread";
 
@@ -7,16 +7,17 @@ export async function advanceReadCursor(
   userId: string,
   messageId?: string | null
 ): Promise<{ advanced: boolean; messageId: string | null }> {
-  let target = messageId?.trim() || null;
+  const target = messageId?.trim().toLowerCase() || null;
   if (!target) {
-    const [latest] = await scyllaGetMessages(chatId, 1);
-    if (!latest?.message_id) {
-      await resetUnreadCount(chatId, userId);
-      return { advanced: false, messageId: null };
-    }
-    target = latest.message_id;
+    return { advanced: false, messageId: null };
+  }
+  const row = await scyllaGetMessage(chatId, target);
+  if (!row) {
+    return { advanced: false, messageId: null };
   }
   const advanced = await upsertReadCursor(chatId, userId, target);
-  await resetUnreadCount(chatId, userId);
+  if (advanced) {
+    await resetUnreadCount(chatId, userId);
+  }
   return { advanced, messageId: target };
 }
