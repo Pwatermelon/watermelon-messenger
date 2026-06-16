@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type RefObject } from "react";
 import type { Chat, ChatSharedCategory, ChatSharedItem, User } from "@melon/shared";
-import BirthdayInfoBlock from "./BirthdayInfoBlock";
 import MediaLightbox, { type MediaLightboxItem } from "./MediaLightbox";
 import CircleLightbox from "./CircleLightbox";
 import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
@@ -206,9 +205,6 @@ export default function ChatInfoModal({
           )}
         </div>
         <p className="contact-info-name">{m.username}</p>
-        {m.birthdayLabel && (
-          <BirthdayInfoBlock label={m.birthdayLabel} age={m.birthdayAge} isToday={m.isBirthdayToday} compact />
-        )}
         {m.yandexLogin && (
           <div className="contact-info-id-block">
             <span className="contact-info-label">Логин</span>
@@ -545,14 +541,6 @@ export default function ChatInfoModal({
             )}
           </div>
           <p className="chat-info-header-title">{headerTitle}</p>
-          {!isGroup && otherMember?.birthdayLabel && (
-            <BirthdayInfoBlock
-              label={otherMember.birthdayLabel}
-              age={otherMember.birthdayAge}
-              isToday={otherMember.isBirthdayToday}
-              compact
-            />
-          )}
           {!isGroup && otherMember?.yandexLogin && (
             <p className="chat-info-header-sub">@{otherMember.yandexLogin}</p>
           )}

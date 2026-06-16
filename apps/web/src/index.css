@@ -3795,11 +3795,11 @@ a {
   position: relative;
   overflow: hidden;
   touch-action: none;
-  cursor: grab;
+  cursor: crosshair;
   background: #d7e0e8;
 }
 
-.location-picker-osm:active {
+.location-picker-osm.is-dragging {
   cursor: grabbing;
 }
 
@@ -3812,38 +3812,38 @@ a {
 }
 
 .location-picker-marker {
+  display: none;
+}
+
+.location-picker-pin {
   position: absolute;
-  z-index: 3;
-  width: 0;
-  height: 0;
-  border: none;
-  padding: 0;
-  margin: 0;
-  background: none;
-  cursor: grab;
-  transform: translate(-50%, -100%);
-  touch-action: none;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  width: 36px;
+  height: 48px;
+  margin-left: -18px;
+  margin-top: -48px;
+  pointer-events: none;
 }
 
-.location-picker-marker-pin {
+.location-picker-pin-svg {
   display: block;
-  width: 28px;
-  height: 28px;
-  margin: 0 auto;
-  border-radius: 50% 50% 50% 0;
-  background: var(--accent);
-  border: 3px solid #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  transform: rotate(-45deg);
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
 }
 
-.location-picker-marker-shadow {
-  display: block;
-  width: 14px;
-  height: 6px;
-  margin: 6px auto 0;
+.location-picker-pin-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  margin-bottom: -4px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .location-picker-zoom {

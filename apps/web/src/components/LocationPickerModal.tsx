@@ -19,15 +19,14 @@ const DEFAULT_CENTER: LatLng = { lat: 55.751244, lng: 37.618423 };
 export function LocationPickerModal({ onConfirm, onCancel }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  const dragStartRef = useRef({ x: 0, y: 0, centerX: 0, centerY: 0 });
-  const markerDragRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0, lastDx: 0, lastDy: 0 });
 
   const [center, setCenter] = useState<LatLng>(DEFAULT_CENTER);
-  const [marker, setMarker] = useState<LatLng | null>(null);
-  const [zoom, setZoom] = useState(13);
+  const [zoom, setZoom] = useState(15);
   const [mapSize, setMapSize] = useState({ w: 0, h: 0 });
   const [geoLoading, setGeoLoading] = useState(false);
   const [mapError, setMapError] = useState("");
+  const [mapDragging, setMapDragging] = useState(false);
 
   const updateSize = useCallback(() => {
     const el = mapRef.current;
@@ -45,25 +44,14 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
   }, [updateSize]);
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setMarker(DEFAULT_CENTER);
-      return;
-    }
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setCenter(next);
-        setMarker(next);
+        setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
-      () => setMarker(DEFAULT_CENTER),
+      () => {},
       { enableHighAccuracy: true, timeout: 12000 }
     );
-  }, []);
-
-  const setPoint = useCallback((lat: number, lng: number, recenter = false) => {
-    const next = { lat, lng };
-    setMarker(next);
-    if (recenter) setCenter(next);
   }, []);
 
   const panByPixels = useCallback(
@@ -94,53 +82,34 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
   );
 
   function onMapPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest(".location-picker-marker")) return;
     draggingRef.current = false;
-    dragStartRef.current = { x: e.clientX, y: e.clientY, centerX: 0, centerY: 0 };
+    dragStartRef.current = { x: e.clientX, y: e.clientY, lastDx: 0, lastDy: 0 };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onMapPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (markerDragRef.current) return;
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
-    if (!draggingRef.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+    if (!draggingRef.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
       draggingRef.current = true;
+      setMapDragging(true);
     }
     if (!draggingRef.current) return;
-    panByPixels(dx - (dragStartRef.current.centerX || 0), dy - (dragStartRef.current.centerY || 0));
-    dragStartRef.current = {
-      ...dragStartRef.current,
-      centerX: dx,
-      centerY: dy,
-    };
+    const stepX = dx - dragStartRef.current.lastDx;
+    const stepY = dy - dragStartRef.current.lastDy;
+    panByPixels(stepX, stepY);
+    dragStartRef.current.lastDx = dx;
+    dragStartRef.current.lastDy = dy;
   }
 
   function onMapPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (markerDragRef.current) return;
     if (!draggingRef.current) {
       const p = pointFromClient(e.clientX, e.clientY);
-      if (p) setPoint(p.lat, p.lng);
+      if (p) setCenter(p);
     }
     draggingRef.current = false;
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  }
-
-  function onMarkerPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    markerDragRef.current = true;
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function onMarkerPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
-    if (!markerDragRef.current) return;
-    const p = pointFromClient(e.clientX, e.clientY);
-    if (p) setPoint(p.lat, p.lng);
-  }
-
-  function onMarkerPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
-    markerDragRef.current = false;
+    setMapDragging(false);
     e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
@@ -153,9 +122,7 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
     setMapError("");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setPoint(lat, lng, true);
+        setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGeoLoading(false);
       },
       () => {
@@ -173,17 +140,6 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
       ? visibleTileRange(mapSize.w, mapSize.h, center, z)
       : null;
 
-  const markerStyle =
-    marker && mapSize.w > 0
-      ? (() => {
-          const p = latLngToWorldPx(marker.lat, marker.lng, z);
-          return {
-            left: `${mapSize.w / 2 + (p.x - centerPx.x)}px`,
-            top: `${mapSize.h / 2 + (p.y - centerPx.y)}px`,
-          };
-        })()
-      : null;
-
   return (
     <div
       className="search-overlay location-picker-overlay"
@@ -197,13 +153,13 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
         </button>
         <h3>Выберите точку на карте</h3>
         <p className="location-picker-hint">
-          OpenStreetMap — нажмите на карту, перетащите метку или отправьте своё местоположение
+          Перемещайте карту — метка в центре. Нажмите на место или отправьте своё местоположение.
         </p>
         {mapError ? <p className="location-picker-error">{mapError}</p> : null}
         <div className="location-picker-map-wrap">
           <div
             ref={mapRef}
-            className="location-picker-map location-picker-osm"
+            className={`location-picker-map location-picker-osm${mapDragging ? " is-dragging" : ""}`}
             onPointerDown={onMapPointerDown}
             onPointerMove={onMapPointerMove}
             onPointerUp={onMapPointerUp}
@@ -229,21 +185,18 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
                   );
                 })
               )}
-            {markerStyle && (
-              <button
-                type="button"
-                className="location-picker-marker"
-                style={markerStyle}
-                aria-label="Метка местоположения"
-                onPointerDown={onMarkerPointerDown}
-                onPointerMove={onMarkerPointerMove}
-                onPointerUp={onMarkerPointerUp}
-                onPointerCancel={onMarkerPointerUp}
-              >
-                <span className="location-picker-marker-pin" />
-                <span className="location-picker-marker-shadow" />
-              </button>
-            )}
+          </div>
+          <div className="location-picker-pin" aria-hidden>
+            <svg className="location-picker-pin-svg" width="36" height="48" viewBox="0 0 36 48">
+              <path
+                d="M18 0C9.716 0 3 6.716 3 15c0 10.5 15 33 15 33s15-22.5 15-33C33 6.716 26.284 0 18 0z"
+                fill="var(--accent)"
+                stroke="#fff"
+                strokeWidth="2.5"
+              />
+              <circle cx="18" cy="15" r="6" fill="#fff" opacity="0.95" />
+            </svg>
+            <span className="location-picker-pin-dot" />
           </div>
           <div className="location-picker-zoom">
             <button
@@ -262,11 +215,9 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
             </button>
           </div>
         </div>
-        {marker && (
-          <p className="location-picker-coords">
-            {marker.lat.toFixed(5)}, {marker.lng.toFixed(5)}
-          </p>
-        )}
+        <p className="location-picker-coords">
+          {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
+        </p>
         <div className="location-picker-actions">
           <button type="button" className="location-picker-geo-btn" onClick={useMyLocation} disabled={geoLoading}>
             <IconLocation size={16} /> {geoLoading ? "Определяем…" : "Моё местоположение"}
@@ -278,8 +229,8 @@ export function LocationPickerModal({ onConfirm, onCancel }: Props) {
             <button
               type="button"
               className="btn-primary"
-              disabled={!marker || geoLoading}
-              onClick={() => marker && onConfirm(marker.lat, marker.lng)}
+              disabled={geoLoading}
+              onClick={() => onConfirm(center.lat, center.lng)}
             >
               Отправить
             </button>
