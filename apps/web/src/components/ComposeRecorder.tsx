@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useVoiceRecorder } from "../hooks/useVoiceRecorder";
 import { useCircleRecorder } from "../hooks/useCircleRecorder";
 import { IconCircle, IconMic, IconSend } from "./Icons";
+import { unlockMessageSounds } from "../utils/messageSounds";
 
 type RecordMode = "voice" | "circle";
 type Gesture = "none" | "cancel" | "lock";
@@ -40,7 +41,6 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
   const startPromiseRef = useRef<Promise<boolean> | null>(null);
   const movedRef = useRef(false);
   const gestureRef = useRef<Gesture>("none");
-  const previewRef = useRef<HTMLVideoElement>(null);
   const sendingRef = useRef(false);
   const pressActiveRef = useRef(false);
   const lockedRef = useRef(false);
@@ -75,10 +75,11 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
     recordingRef.current = voice.recording || circle.recording;
   }, [voice.recording, circle.recording]);
 
-  useEffect(() => {
-    const el = previewRef.current;
+  const attachPreview = useCallback((el: HTMLVideoElement | null) => {
     if (el && circle.previewStream) {
-      el.srcObject = circle.previewStream;
+      if (el.srcObject !== circle.previewStream) {
+        el.srcObject = circle.previewStream;
+      }
       el.setAttribute("playsinline", "true");
       el.setAttribute("webkit-playsinline", "true");
       void el.play().catch(() => {});
@@ -240,8 +241,7 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
     }
 
     if (!holdActivatedRef.current && !movedRef.current) {
-      releaseInactiveAcquire();
-      activeRecorder().releaseAcquire();
+      cancelRecording();
       persistMode(modeRef.current === "voice" ? "circle" : "voice");
       return;
     }
@@ -301,6 +301,7 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
 
   function beginPress(clientX: number, clientY: number) {
     if (disabledRef.current || lockedRef.current || pressActiveRef.current) return;
+    unlockMessageSounds();
     pressActiveRef.current = true;
     originRef.current = { x: clientX, y: clientY };
     movedRef.current = false;
@@ -325,21 +326,17 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
 
     holdTimerRef.current = setTimeout(() => {
       holdActivatedRef.current = true;
+    }, HOLD_MS);
+
+    void (async () => {
       const p = (async () => {
-        if (!startPromiseRef.current) {
-          const acquired = await acquireRecording();
-          if (!acquired) return false;
-        } else {
-          const acquired = await startPromiseRef.current;
-          if (!acquired) return false;
-        }
+        const acquired = await acquireRecording();
+        if (!acquired) return false;
         return beginRecording();
       })();
       startPromiseRef.current = p;
-      void p.finally(() => {
-        if (startPromiseRef.current === p) startPromiseRef.current = null;
-      });
-    }, HOLD_MS);
+      await p;
+    })();
   }
 
   useEffect(() => () => clearPressListeners(), []);
@@ -376,7 +373,7 @@ export function ComposeRecorder({ disabled, onVoiceSend, onCircleSend }: Compose
           {activeMode === "circle" && (
             <div className={`record-circle-preview ${gesture === "cancel" ? "record-circle-cancel" : ""}`}>
               <video
-                ref={previewRef}
+                ref={attachPreview}
                 className="record-circle-video"
                 muted
                 playsInline

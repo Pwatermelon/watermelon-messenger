@@ -1445,7 +1445,12 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
             }
             const naked = mt === "circle" || mt === "voice" || mt === "image";
             const own = m.senderId === user?.id;
-            const showRowSender = chat?.type === "group" && !own && naked;
+            const sameSenderCluster =
+              chat?.type === "group" &&
+              !own &&
+              prevCountable &&
+              prevCountable.senderId === m.senderId;
+            const showRowSender = chat?.type === "group" && !own && naked && !sameSenderCluster;
             const peerReaders = own ? getPeerReaders(m) : [];
             const selectable = canDeleteMessage(m);
             const selected = selectedIds.has(m.id);

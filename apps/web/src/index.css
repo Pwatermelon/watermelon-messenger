@@ -3791,6 +3791,95 @@ a {
   height: 100%;
 }
 
+.location-picker-osm {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background: #d7e0e8;
+}
+
+.location-picker-osm:active {
+  cursor: grabbing;
+}
+
+.location-picker-tile {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.location-picker-marker {
+  position: absolute;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+  cursor: grab;
+  transform: translate(-50%, -100%);
+  touch-action: none;
+}
+
+.location-picker-marker-pin {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  border-radius: 50% 50% 50% 0;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transform: rotate(-45deg);
+}
+
+.location-picker-marker-shadow {
+  display: block;
+  width: 14px;
+  height: 6px;
+  margin: 6px auto 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.location-picker-zoom {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.location-picker-zoom button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.location-picker-attribution {
+  margin: 0.5rem 1rem 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.location-picker-attribution a {
+  color: var(--muted);
+}
+
 .location-picker-loading {
   position: absolute;
   inset: 0;
@@ -4728,6 +4817,11 @@ a {
   align-items: center;
   gap: 0.3rem;
   max-width: 100%;
+  flex-shrink: 0;
+}
+
+.message-row:has(.message-circle) {
+  margin-bottom: 0.35rem;
 }
 
 .circle-player {
@@ -4842,8 +4936,8 @@ a {
   gap: 0.25rem;
 }
 
-/* legacy */
-.message-circle {
+/* legacy bare video element */
+video.message-circle {
   width: 200px;
   height: 200px;
   border-radius: 50%;
@@ -5616,7 +5710,10 @@ a {
   width: fit-content;
   max-width: none;
   min-width: 0;
+  height: auto;
+  min-height: 0;
   gap: 0.15rem;
+  overflow: visible;
 }
 
 .message.own.message-naked.message-circle {
@@ -6056,7 +6153,7 @@ a {
   .profile-overlay .profile-modal { width: 100%; border-radius: 12px 12px 0 0; align-self: flex-end; }
   .record-circle-preview { width: 150px; height: 150px; }
   .voice-player { max-width: min(280px, 72vw); }
-  .circle-player { transform: scale(0.9); transform-origin: center; }
+  .circle-player { transform: scale(0.9); transform-origin: top center; }
   .compose { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
   .chat-header { padding-top: max(0.5rem, env(safe-area-inset-top)); }
 }
