@@ -88,7 +88,7 @@ export async function clampReadCursorsAfterPrune(chatId: string, keepFromMessage
   const keep = normalizeMessageId(keepFromMessageId);
   await db.execute(sql`
     UPDATE chat_read_cursors
-    SET last_read_message_id = ${keep}, updated_at = now()
+    SET last_read_message_id = ${keep}
     WHERE chat_id = ${chatId}::uuid
       AND last_read_message_id < ${keep}
   `);

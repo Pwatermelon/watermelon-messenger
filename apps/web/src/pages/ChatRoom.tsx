@@ -175,14 +175,6 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     const list = listRef.current;
     if (!list) return false;
     const normalized = messageId.trim().toLowerCase();
-    const latest = messagesRef.current[messagesRef.current.length - 1];
-    if (
-      stickToBottomRef.current &&
-      latest &&
-      latest.id.trim().toLowerCase() === normalized
-    ) {
-      return true;
-    }
     return isMessageVisibleInViewport(list, normalized);
   }
 
@@ -203,17 +195,23 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     const listEl = listRef.current;
     if (!listEl) return null;
 
-    const latestId = list[list.length - 1]!.id;
     const userKey = user.id.toLowerCase();
     const lastRead = readCursorsRef.current[userKey] ?? readCursorsRef.current[user.id] ?? null;
     const bounds = findUnreadBounds(list, lastRead, user.id, serverUnreadCountRef.current);
 
-    if (stickToBottomRef.current && isMessageVisibleInViewport(listEl, latestId)) {
-      return latestId;
-    }
     if (bounds.last && isMessageVisibleInViewport(listEl, bounds.last.id)) {
       return bounds.last.id;
     }
+
+    const latest = list[list.length - 1]!;
+    if (
+      stickToBottomRef.current &&
+      latest.senderId.toLowerCase() !== userKey &&
+      isMessageVisibleInViewport(listEl, latest.id)
+    ) {
+      return latest.id;
+    }
+
     return null;
   }
 
@@ -557,7 +555,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         const userKey = msg.userId.toLowerCase();
         const updatedAt = msg.updatedAt ?? new Date().toISOString();
         const cur = readCursorsRef.current[userKey] ?? readCursorsRef.current[msg.userId];
+        const curTime = readCursorTimesRef.current[userKey] ?? readCursorTimesRef.current[msg.userId];
         if (cur && compareMessageId(cur, incomingId) > 0) return;
+        if (cur && compareMessageId(cur, incomingId) === 0 && curTime) {
+          const curAt = Date.parse(curTime);
+          const incAt = Date.parse(updatedAt);
+          if (Number.isFinite(curAt) && Number.isFinite(incAt) && incAt <= curAt) return;
+        }
         const nextCursors = { ...readCursorsRef.current, [userKey]: incomingId };
         const nextTimes = { ...readCursorTimesRef.current, [userKey]: updatedAt };
         readCursorsRef.current = nextCursors;

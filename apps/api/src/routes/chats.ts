@@ -645,8 +645,8 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
       set.status = 403;
       return { error: "Not a member of this chat" };
     }
-    const { messageId: resolvedId, updatedAt } = await advanceReadCursor(chatId, u.id, messageId);
-    if (resolvedId) {
+    const { advanced, messageId: resolvedId, updatedAt } = await advanceReadCursor(chatId, u.id, messageId);
+    if (advanced && resolvedId) {
       await publishChatEvent(chatId, {
         type: "read_receipt",
         chatId,

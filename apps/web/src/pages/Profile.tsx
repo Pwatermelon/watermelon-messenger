@@ -120,7 +120,6 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
     try {
       await blockUser(profile.id);
       setIsBlocked(true);
-      setIsContact(false);
       onContactChange?.();
       window.dispatchEvent(new Event("wm:block-changed"));
     } finally {

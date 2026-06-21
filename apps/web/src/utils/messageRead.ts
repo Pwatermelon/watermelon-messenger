@@ -10,19 +10,32 @@ export function isMessageReadByCursor(
   messageCreatedAt?: string | null
 ): boolean {
   if (!lastReadMessageId?.trim()) return false;
-  if (compareMessageId(lastReadMessageId, messageId) < 0) return false;
-  // Timestamp guard only when cursor points at this exact message (stale id backfill).
-  if (
-    messageCreatedAt &&
-    lastReadUpdatedAt &&
-    compareMessageId(lastReadMessageId, messageId) === 0
-  ) {
-    const msgAt = Date.parse(messageCreatedAt);
-    const curAt = Date.parse(lastReadUpdatedAt);
-    if (Number.isFinite(msgAt) && Number.isFinite(curAt) && curAt + READ_SKEW_MS < msgAt) {
-      return false;
-    }
+  const cmp = compareMessageId(lastReadMessageId, messageId);
+  if (cmp < 0) return false;
+
+  if (!messageCreatedAt) {
+    return cmp === 0;
   }
+
+  const msgAt = Date.parse(messageCreatedAt);
+  if (!Number.isFinite(msgAt)) {
+    return cmp === 0;
+  }
+
+  if (!lastReadUpdatedAt) {
+    return false;
+  }
+
+  const curAt = Date.parse(lastReadUpdatedAt);
+  if (!Number.isFinite(curAt)) {
+    return false;
+  }
+
+  // Cursor must have been updated after the message existed (guards stale/ahead ids).
+  if (curAt + READ_SKEW_MS < msgAt) {
+    return false;
+  }
+
   return true;
 }
 

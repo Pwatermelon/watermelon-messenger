@@ -87,7 +87,19 @@ export function SendMediaModal({
   }
 
   return (
-    <div className="send-media-overlay" role="dialog" aria-modal="true" aria-label="Отправка медиа">
+    <div
+      className="send-media-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !sending) onClose();
+      }}
+    >
+      <div
+        className="send-media-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Отправка медиа"
+        onClick={(e) => e.stopPropagation()}
+      >
       <header className="send-media-header">
         <button type="button" className="send-media-header-btn" onClick={onClose} disabled={sending} aria-label="Закрыть">
           ×
@@ -190,6 +202,7 @@ export function SendMediaModal({
           </button>
         </div>
       </footer>
+      </div>
     </div>
   );
 }
