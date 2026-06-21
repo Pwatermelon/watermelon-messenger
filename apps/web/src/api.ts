@@ -193,18 +193,7 @@ export async function searchUser(query: string): Promise<User | null> {
     headers: { Authorization: `Bearer ${getToken()}` },
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Failed to lookup user");
-  return res.json();
-}
-
-export async function getUserByYandexLogin(login: string): Promise<User | null> {
-  const q = login.trim().toLowerCase();
-  if (!q) return null;
-  const res = await fetch(`${getApiUrl()}/chats/users/by-login/${encodeURIComponent(q)}`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Failed to lookup user");
+  if (!res.ok) return null;
   return res.json();
 }
 

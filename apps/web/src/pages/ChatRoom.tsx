@@ -15,7 +15,7 @@ import ChatInfoModal from "../components/ChatInfoModal";
 import { IconAttach, IconFile, IconLocation, IconPhoto, IconSend, IconTrash, IconVideo, IconBack, IconChevronDown, IconSmile } from "../components/Icons";
 import ComposeEmojiStickerPanel from "../components/ComposeEmojiStickerPanel";
 import StickerPackViewModal from "../components/StickerPackViewModal";
-import { getChat, getChats, getMessages, uploadFile, addGroupMembers, removeGroupMember, getUserByYandexLogin, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi, getChatReadCursors, setMessageReaction } from "../api";
+import { getChat, getChats, getMessages, uploadFile, addGroupMembers, removeGroupMember, searchUser, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi, getChatReadCursors, setMessageReaction } from "../api";
 import { extFromBlobType } from "../utils/mediaMime";
 import { compressImage, isGifFileDeep } from "../utils/imageCompress";
 import ImageLightbox from "../components/ImageLightbox";
@@ -1597,22 +1597,32 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     }
   }
 
-  async function handleAddGroupMember() {
-    if (!chatId || !groupAddLogin.trim()) return;
+  async function handleAddGroupMember(userId?: string) {
+    if (!chatId) return;
     setGroupAddError("");
     try {
-      const u = await getUserByYandexLogin(groupAddLogin.trim());
-      if (!u) {
-        setGroupAddError("Пользователь не найден");
+      let targetId = userId;
+      if (!targetId) {
+        const q = groupAddLogin.trim();
+        if (!q) return;
+        const u = await searchUser(q);
+        if (!u) {
+          setGroupAddError("Пользователь не найден");
+          return;
+        }
+        targetId = u.id;
+      }
+      if (chat?.members.some((m) => m.id === targetId)) {
+        setGroupAddError("Уже в группе");
         return;
       }
-      await addGroupMembers(chatId, [u.id]);
+      await addGroupMembers(chatId, [targetId]);
       const fresh = await getChat(chatId);
       if (fresh) setChat(fresh as Chat);
       setGroupAddLogin("");
       window.dispatchEvent(new Event("wm:refresh-chats"));
-    } catch (e) {
-      setGroupAddError(e instanceof Error ? e.message : "Ошибка");
+    } catch {
+      setGroupAddError("Не удалось добавить участника");
     }
   }
 
@@ -2156,7 +2166,8 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
           groupAddLogin={groupAddLogin}
           setGroupAddLogin={setGroupAddLogin}
           groupAddError={groupAddError}
-          onAddGroupMember={handleAddGroupMember}
+          onAddGroupMember={() => void handleAddGroupMember()}
+          onAddGroupMemberById={(id) => void handleAddGroupMember(id)}
           onRemoveGroupMember={handleRemoveGroupMember}
           onRequestDeleteChat={requestDeleteChat}
           onLeaveGroup={() => user && handleRemoveGroupMember(user.id)}

@@ -5,7 +5,8 @@ import CircleLightbox from "./CircleLightbox";
 import { CircleVideoThumb } from "./CircleVideoThumb";
 import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
 import { IconBell, IconBellOff, IconFile, IconUser } from "./Icons";
-import { getChatShared, updateChatNotifications } from "../api";
+import { ContactPickItem } from "./ContactPickItem";
+import { getChatShared, getContacts, updateChatNotifications } from "../api";
 import { mediaDownloadUrl, mediaUrl } from "../utils/mediaUrl";
 
 type TabId = "participants" | ChatSharedCategory;
@@ -42,6 +43,7 @@ type Props = {
   setGroupAddLogin: (v: string) => void;
   groupAddError: string;
   onAddGroupMember: () => void;
+  onAddGroupMemberById: (userId: string) => void;
   onRemoveGroupMember: (userId: string) => void;
   onRequestDeleteChat: () => void;
   onLeaveGroup: () => void;
@@ -84,6 +86,7 @@ export default function ChatInfoModal({
   setGroupAddLogin,
   groupAddError,
   onAddGroupMember,
+  onAddGroupMemberById,
   onRemoveGroupMember,
   onRequestDeleteChat,
   onLeaveGroup,
@@ -101,6 +104,21 @@ export default function ChatInfoModal({
   const [loadingTab, setLoadingTab] = useState<ChatSharedCategory | null>(null);
   const [lightbox, setLightbox] = useState<{ items: MediaLightboxItem[]; index: number } | null>(null);
   const [circleLightbox, setCircleLightbox] = useState<{ src: string; duration?: number } | null>(null);
+  const [contacts, setContacts] = useState<User[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+
+  const memberIds = useMemo(
+    () => new Set(chat.members.map((m) => m.id.toLowerCase())),
+    [chat.members]
+  );
+
+  const addableContacts = useMemo(
+    () =>
+      contacts.filter(
+        (c) => c.id.toLowerCase() !== currentUserId.toLowerCase() && !memberIds.has(c.id.toLowerCase())
+      ),
+    [contacts, currentUserId, memberIds]
+  );
 
   const resetShared = useCallback(() => {
     setSharedByTab({});
@@ -113,10 +131,30 @@ export default function ChatInfoModal({
       setLightbox(null);
       setCircleLightbox(null);
       resetShared();
+      setContacts([]);
       return;
     }
     setTab(defaultTab);
   }, [open, resetShared, defaultTab, chat.id]);
+
+  useEffect(() => {
+    if (!open || !isGroupAdmin) return;
+    let cancelled = false;
+    setContactsLoading(true);
+    getContacts()
+      .then((list) => {
+        if (!cancelled) setContacts(list);
+      })
+      .catch(() => {
+        if (!cancelled) setContacts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setContactsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isGroupAdmin, chat.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -261,11 +299,11 @@ export default function ChatInfoModal({
         </ul>
         {isGroupAdmin && (
           <div className="contact-info-add-members">
-            <p className="contact-info-members-label">Добавить по логину</p>
+            <p className="contact-info-members-label">Добавить по логину или имени</p>
             <div className="search-id-row">
               <input
                 type="text"
-                placeholder="Логин"
+                placeholder="Логин или имя"
                 value={groupAddLogin}
                 onChange={(e) => setGroupAddLogin(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onAddGroupMember())}
@@ -277,6 +315,22 @@ export default function ChatInfoModal({
               </button>
             </div>
             {groupAddError && <p className="search-error">{groupAddError}</p>}
+            <p className="dm-contacts-label">Контакты</p>
+            <div className="dm-contacts-list">
+              {contactsLoading ? (
+                <p className="search-hint">Загрузка…</p>
+              ) : addableContacts.length === 0 ? (
+                <p className="search-hint">
+                  {contacts.length === 0
+                    ? "Нет контактов — добавьте из профиля"
+                    : "Все контакты уже в группе"}
+                </p>
+              ) : (
+                addableContacts.map((c) => (
+                  <ContactPickItem key={c.id} user={c} onClick={() => onAddGroupMemberById(c.id)} />
+                ))
+              )}
+            </div>
           </div>
         )}
         <button type="button" className="contact-info-remove-btn" onClick={onLeaveGroup}>

@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, or, sql } from "drizzle-orm";
 import { authPlugin, requireAuth } from "../auth";
 import { db, users, chats, chatMembers } from "../db";
 import { getMessages as scyllaGetMessages, getMessage as scyllaGetMessage, deleteMessage as scyllaDeleteMessage, insertMessage as scyllaInsertMessage, deleteChatMessages, updateMessageContent as scyllaUpdateMessageContent } from "../services/scylla";
@@ -159,20 +159,29 @@ async function publishGroupSystemEvent(
   await publishChatEvent(chatId, { type: "message", message });
 }
 
+async function findUserByLoginOrUsername(query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const [target] = await db
+    .select()
+    .from(users)
+    .where(
+      or(sql`lower(${users.yandexLogin}) = ${q}`, sql`lower(${users.username}) = ${q}`)
+    )
+    .limit(1);
+  return target ?? null;
+}
+
 export const chatRoutes = new Elysia({ prefix: "/chats" })
   .use(authPlugin)
   .get("/users/by-login/:login", async ({ user, params, set }) => {
     const viewer = requireAuth(set)(user);
-    const login = (params as { login?: string }).login?.trim().toLowerCase();
+    const login = (params as { login?: string }).login?.trim();
     if (!login) {
       set.status = 404;
       return { error: "User not found" };
     }
-    const [target] = await db
-      .select()
-      .from(users)
-      .where(sql`lower(${users.yandexLogin}) = ${login}`)
-      .limit(1);
+    const target = await findUserByLoginOrUsername(login);
     if (!target) {
       set.status = 404;
       return { error: "User not found" };
@@ -186,16 +195,12 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
   })
   .get("/users/search/:query", async ({ user, params, set }) => {
     const viewer = requireAuth(set)(user);
-    const q = decodeURIComponent((params as { query?: string }).query ?? "").trim().toLowerCase();
+    const q = decodeURIComponent((params as { query?: string }).query ?? "").trim();
     if (!q) {
       set.status = 404;
       return { error: "User not found" };
     }
-    const [target] = await db
-      .select()
-      .from(users)
-      .where(sql`lower(${users.yandexLogin}) = ${q}`)
-      .limit(1);
+    const target = await findUserByLoginOrUsername(q);
     if (!target) {
       set.status = 404;
       return { error: "User not found" };

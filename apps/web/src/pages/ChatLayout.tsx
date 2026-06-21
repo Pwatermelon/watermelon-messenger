@@ -498,7 +498,7 @@ export default function ChatLayout() {
               type="search"
               className="sidebar-search-input"
               data-testid="sidebar-user-search"
-              placeholder="Логин"
+              placeholder="Логин или имя"
               value={sidebarQuery}
               onChange={(e) => { setSidebarQuery(e.target.value); setSidebarError(""); setSidebarUser(null); }}
               onKeyDown={(e) => e.key === "Enter" && lookupSidebarUser()}
@@ -691,7 +691,7 @@ export default function ChatLayout() {
                 <input
                   type="text"
                   data-testid="dm-user-id-input"
-                  placeholder="Логин"
+                  placeholder="Логин или имя"
                   value={dmLogin}
                   onChange={(e) => { setDmLogin(e.target.value); setDmError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && lookupDmUser()}
@@ -796,7 +796,7 @@ export default function ChatLayout() {
             <div className="search-id-row">
               <input
                 type="text"
-                placeholder="Логин"
+                placeholder="Логин или имя"
                 value={groupAddLogin}
                 onChange={(e) => { setGroupAddLogin(e.target.value); setGroupAddError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGroupMemberByLogin())}
