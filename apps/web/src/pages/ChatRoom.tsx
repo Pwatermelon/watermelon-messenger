@@ -15,7 +15,7 @@ import ChatInfoModal from "../components/ChatInfoModal";
 import { IconAttach, IconFile, IconLocation, IconPhoto, IconSend, IconTrash, IconVideo, IconBack, IconChevronDown, IconSmile } from "../components/Icons";
 import ComposeEmojiStickerPanel from "../components/ComposeEmojiStickerPanel";
 import StickerPackViewModal from "../components/StickerPackViewModal";
-import { getChat, getChats, getMessages, uploadFile, addGroupMembers, removeGroupMember, getUserByYandexLogin, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi, setMessageReaction } from "../api";
+import { getChat, getChats, getMessages, uploadFile, addGroupMembers, removeGroupMember, getUserByYandexLogin, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi, getChatReadCursors, setMessageReaction } from "../api";
 import { extFromBlobType } from "../utils/mediaMime";
 import { compressImage, isGifFileDeep } from "../utils/imageCompress";
 import ImageLightbox from "../components/ImageLightbox";
@@ -50,7 +50,7 @@ import {
   scrollListToMessage,
   compareMessageId,
 } from "../utils/chatUnread";
-import { getMessageReaders, isMessageReadByAnyPeer } from "../utils/messageRead";
+import { getMessageReaders, isMessageReadByAnyPeer, isMessageReadByCursor, mergeReadCursor } from "../utils/messageRead";
 import { formatMessageDateLabel, shouldShowDateDivider } from "../utils/messageDates";
 import { captureCirclePoster } from "../utils/circlePoster";
 import { playMessageSound } from "../utils/messageSounds";
@@ -147,14 +147,13 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }, [loading]);
 
   function applyReadCursors(rows: { userId: string; lastReadMessageId: string; updatedAt?: string }[]) {
-    const map = Object.fromEntries(
-      rows.map((r) => [r.userId.toLowerCase(), r.lastReadMessageId.trim().toLowerCase()])
-    );
-    const times = Object.fromEntries(
-      rows
-        .filter((r) => r.updatedAt)
-        .map((r) => [r.userId.toLowerCase(), r.updatedAt as string])
-    );
+    const map = { ...readCursorsRef.current };
+    const times = { ...readCursorTimesRef.current };
+    for (const r of rows) {
+      const key = r.userId.toLowerCase();
+      map[key] = mergeReadCursor(map[key], r.lastReadMessageId);
+      if (r.updatedAt) times[key] = r.updatedAt;
+    }
     readCursorsRef.current = map;
     readCursorTimesRef.current = times;
     setReadCursors(map);
@@ -171,30 +170,16 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     return document.visibilityState === "visible";
   }
 
-  function isMessageSeenForRead(messageId: string): boolean {
-    const list = listRef.current;
-    if (!list) return false;
-    const normalized = messageId.trim().toLowerCase();
-    const userKey = user?.id?.toLowerCase();
-    const latest = messagesRef.current[messagesRef.current.length - 1];
-    if (
-      userKey &&
-      stickToBottomRef.current &&
-      latest &&
-      latest.id.trim().toLowerCase() === normalized &&
-      latest.senderId.toLowerCase() !== userKey
-    ) {
-      return true;
-    }
-    return isMessageVisibleInViewport(list, normalized);
-  }
-
   function membersForReadReceipts(): User[] {
     if (chat?.members?.length) return chat.members;
     if (chat?.type === "dm" && user?.id) {
-      const peer = chat.members.find((m) => m.id.toLowerCase() !== user.id.toLowerCase());
+      const peer =
+        chat.members.find((m) => m.id.toLowerCase() !== user.id.toLowerCase()) ??
+        Object.keys(readCursorsRef.current)
+          .filter((k) => k !== user.id.toLowerCase())
+          .map((id) => ({ id, username: "?" } as User))[0];
       if (peer) {
-        return [{ id: user.id, username: user.username ?? "?" } as User, peer];
+        return [{ id: user.id, username: user.username ?? "?", avatarUrl: user.avatarUrl } as User, peer];
       }
     }
     return chat?.members ?? [];
@@ -202,31 +187,29 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
 
   function resolveMarkReadTarget(): string | null {
     const list = messagesRef.current;
-    if (!list.length || !user?.id) return null;
-    const listEl = listRef.current;
-    if (!listEl) return null;
+    if (!list.length || !user?.id || !listRef.current) return null;
 
     const userKey = user.id.toLowerCase();
-    const latest = list[list.length - 1]!;
+    const listEl = listRef.current;
 
-    if (stickToBottomRef.current && latest.senderId.toLowerCase() !== userKey) {
-      return latest.id;
+    // Внизу чата — прочитано до последнего сообщения (включая своё: TimeUUID курсора покрывает всё до него).
+    if (stickToBottomRef.current) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        const m = list[i]!;
+        if ((m.messageType ?? "text") === "system") continue;
+        return m.id;
+      }
     }
 
-    for (let i = list.length - 1; i >= 0; i--) {
-      const m = list[i]!;
+    // Иначе — самое новое видимое входящее.
+    let best: string | null = null;
+    for (const m of list) {
       if ((m.messageType ?? "text") === "system") continue;
       if (m.senderId.toLowerCase() === userKey) continue;
-      if (isMessageVisibleInViewport(listEl, m.id)) return m.id;
-      break;
+      if (!isMessageVisibleInViewport(listEl, m.id)) continue;
+      if (!best || compareMessageId(m.id, best) > 0) best = m.id;
     }
-
-    const lastRead = readCursorsRef.current[userKey] ?? readCursorsRef.current[user.id] ?? null;
-    const bounds = findUnreadBounds(list, lastRead, user.id, serverUnreadCountRef.current);
-    if (bounds.last && isMessageVisibleInViewport(listEl, bounds.last.id)) {
-      return bounds.last.id;
-    }
-    return null;
+    return best;
   }
 
   function persistMarkRead(messageId: string, attempt = 0) {
@@ -268,8 +251,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
 
   function markChatRead(messageId: string) {
     if (!chatId || !user?.id || !canMarkReadNow() || !messagesReady) return;
-    const normalized = messageId.toLowerCase();
-    if (!isMessageSeenForRead(normalized)) return;
+    const normalized = messageId.trim().toLowerCase();
     const userKey = user.id.toLowerCase();
     const mine = readCursorsRef.current[userKey] ?? readCursorsRef.current[user.id];
     if (mine && compareMessageId(mine, normalized) >= 0) {
@@ -287,38 +269,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   }
 
   function scheduleMarkChatRead(messageId: string) {
-    const normalized = messageId.toLowerCase();
-    const attempt = () => {
-      if (isMessageSeenForRead(normalized)) markChatRead(normalized);
-    };
-    requestAnimationFrame(() => {
-      attempt();
-      requestAnimationFrame(attempt);
-    });
-  }
-
-  function getPeerReaders(m: Message) {
-    if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return [];
-    return getMessageReaders(
-      m.id,
-      m.senderId,
-      membersForReadReceipts(),
-      readCursors,
-      readCursorTimes,
-      m.createdAt
-    );
-  }
-
-  function isMessageReadByPeers(m: Message): boolean {
-    if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return false;
-    return isMessageReadByAnyPeer(
-      m.id,
-      m.senderId,
-      membersForReadReceipts(),
-      readCursors,
-      readCursorTimes,
-      m.createdAt
-    );
+    requestAnimationFrame(() => markChatRead(messageId));
   }
 
   useEffect(() => {
@@ -400,6 +351,22 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
 
   const otherMember = chat?.type === "dm" ? chat.members.find((m) => m.id !== user?.id) : null;
 
+  function getPeerReaders(m: Message) {
+    if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return [];
+    return getMessageReaders(m.id, m.senderId, membersForReadReceipts(), readCursors);
+  }
+
+  function isMessageReadByPeers(m: Message): boolean {
+    if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return false;
+    if (chat?.type === "dm") {
+      const peerId = otherMember?.id ?? Object.keys(readCursors).find((k) => k !== user.id.toLowerCase());
+      if (!peerId) return false;
+      const peerCursor = readCursors[peerId.toLowerCase()] ?? readCursors[peerId];
+      return isMessageReadByCursor(m.id, peerCursor);
+    }
+    return isMessageReadByAnyPeer(m.id, m.senderId, membersForReadReceipts(), readCursors);
+  }
+
   const peerActivityLabel = useMemo(() => {
     if (!chat || peerActivities.size === 0) return null;
     const names = new Map(chat.members.map((m) => [m.id, m.username]));
@@ -444,6 +411,22 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
     if (!chatId || !ready) return;
     send({ type: "subscribe", chatId });
   }, [chatId, ready, send]);
+
+  useEffect(() => {
+    if (!chatId || !messagesReady) return;
+    let cancelled = false;
+    const sync = () => {
+      void getChatReadCursors(chatId).then((rows) => {
+        if (!cancelled && rows.length) applyReadCursors(rows);
+      });
+    };
+    sync();
+    const timer = window.setInterval(sync, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [chatId, messagesReady]);
 
   const clearPeerActivity = useCallback((userId: string) => {
     const timer = peerActivityTimersRef.current.get(userId);
@@ -565,18 +548,18 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
         );
       }
       if (msg.type === "read_receipt" && msg.chatId === chatId) {
-        const incomingId = msg.messageId.toLowerCase();
+        const incomingId = msg.messageId.trim().toLowerCase();
         const userKey = msg.userId.toLowerCase();
         const updatedAt = msg.updatedAt ?? new Date().toISOString();
-        const cur = readCursorsRef.current[userKey] ?? readCursorsRef.current[msg.userId];
-        const curTime = readCursorTimesRef.current[userKey] ?? readCursorTimesRef.current[msg.userId];
-        if (cur && compareMessageId(cur, incomingId) > 0) return;
-        if (cur && compareMessageId(cur, incomingId) === 0 && curTime) {
-          const curAt = Date.parse(curTime);
+        const cur = readCursorsRef.current[userKey];
+        const merged = mergeReadCursor(cur, incomingId);
+        if (cur === merged) {
+          const curTime = readCursorTimesRef.current[userKey];
+          const curAt = curTime ? Date.parse(curTime) : NaN;
           const incAt = Date.parse(updatedAt);
-          if (Number.isFinite(curAt) && Number.isFinite(incAt) && incAt <= curAt) return;
+          if (!Number.isFinite(incAt) || (Number.isFinite(curAt) && incAt <= curAt)) return;
         }
-        const nextCursors = { ...readCursorsRef.current, [userKey]: incomingId };
+        const nextCursors = { ...readCursorsRef.current, [userKey]: merged };
         const nextTimes = { ...readCursorTimesRef.current, [userKey]: updatedAt };
         readCursorsRef.current = nextCursors;
         readCursorTimesRef.current = nextTimes;
@@ -671,12 +654,20 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
   useEffect(() => {
     if (!chatId || messages.length === 0 || !user?.id || !canMarkReadNow() || !messagesReady) return;
     if (prependingOlderRef.current || loadingOlderRef.current) return;
-    if (suppressAutoReadRef.current) {
-      refreshUnreadJumpCount();
-      return;
+
+    const listEl = listRef.current;
+    const firstUnread = unreadBounds.first;
+    if (suppressAutoReadRef.current && firstUnread && listEl) {
+      if (isMessageVisibleInViewport(listEl, firstUnread.id, 8)) {
+        suppressAutoReadRef.current = false;
+      } else {
+        refreshUnreadJumpCount();
+        return;
+      }
     }
+
     tryMarkReadFromScroll();
-  }, [chatId, messages, user?.id, messagesReady, tryMarkReadFromScroll, refreshUnreadJumpCount]);
+  }, [chatId, messages, user?.id, messagesReady, tryMarkReadFromScroll, refreshUnreadJumpCount, unreadBounds.first]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -1803,7 +1794,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
               );
             }
             const naked = mt === "circle" || mt === "voice" || mt === "image" || mt === "sticker";
-            const own = m.senderId === user?.id;
+            const own = user?.id != null && m.senderId.toLowerCase() === user.id.toLowerCase();
             const sameSenderCluster =
               chat?.type === "group" &&
               !own &&

@@ -627,6 +627,21 @@ export const chatRoutes = new Elysia({ prefix: "/chats" })
     const count = await resolveUnreadCount(chatId, u.id, lastRead);
     return { count };
   })
+  .get("/:id/read-cursors", async ({ user, params, set }) => {
+    const u = requireAuth(set)(user);
+    const { id: chatId } = params;
+    const [member] = await db
+      .select()
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, u.id)))
+      .limit(1);
+    if (!member) {
+      set.status = 403;
+      return { error: "Not a member of this chat" };
+    }
+    const readCursors = await getReadCursors(chatId);
+    return { readCursors };
+  })
   .post("/:id/read", async ({ user, params, body, set }) => {
     const u = requireAuth(set)(user);
     const { id: chatId } = params;

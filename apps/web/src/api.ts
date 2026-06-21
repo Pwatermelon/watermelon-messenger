@@ -371,6 +371,15 @@ export async function getChatUnreadCount(chatId: string): Promise<number> {
   return typeof data.count === "number" ? data.count : 0;
 }
 
+export async function getChatReadCursors(chatId: string): Promise<ReadCursor[]> {
+  const res = await fetch(`${getApiUrl()}/chats/${encodeURIComponent(chatId)}/read-cursors`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { readCursors?: ReadCursor[] };
+  return data.readCursors ?? [];
+}
+
 export async function getMessages(
   chatId: string,
   limit?: number,

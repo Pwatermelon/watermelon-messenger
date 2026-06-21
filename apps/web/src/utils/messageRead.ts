@@ -1,28 +1,13 @@
 import type { User } from "@melon/shared";
-import { compareMessageId } from "./chatUnread";
+import { compareMessageId } from "@melon/shared";
 
-const READ_SKEW_MS = 2500;
-
+/** Прочитано, если курсор peer >= id сообщения (как в Telegram/WhatsApp). */
 export function isMessageReadByCursor(
   messageId: string,
-  lastReadMessageId: string | null | undefined,
-  lastReadUpdatedAt?: string | null,
-  messageCreatedAt?: string | null
+  lastReadMessageId: string | null | undefined
 ): boolean {
   if (!lastReadMessageId?.trim()) return false;
-  const cmp = compareMessageId(lastReadMessageId, messageId);
-  if (cmp < 0) return false;
-
-  // Cursor sits on this message — peer explicitly read through it.
-  if (cmp === 0) return true;
-
-  // Cursor is ahead: count older messages as read only when read time
-  // proves they already existed (guards stale id backfill after retention clamp).
-  if (!messageCreatedAt || !lastReadUpdatedAt) return false;
-  const msgAt = Date.parse(messageCreatedAt);
-  const curAt = Date.parse(lastReadUpdatedAt);
-  if (!Number.isFinite(msgAt) || !Number.isFinite(curAt)) return false;
-  return curAt + READ_SKEW_MS >= msgAt;
+  return compareMessageId(lastReadMessageId, messageId) >= 0;
 }
 
 export type MessageReader = {
@@ -32,38 +17,21 @@ export type MessageReader = {
 };
 
 function readCursorForUser(readCursors: Record<string, string>, userId: string): string | undefined {
-  return readCursors[userId] ?? readCursors[userId.toLowerCase()];
+  const key = userId.trim().toLowerCase();
+  return readCursors[key] ?? readCursors[userId];
 }
 
-function readCursorTimeForUser(
-  readCursorTimes: Record<string, string> | undefined,
-  userId: string
-): string | undefined {
-  if (!readCursorTimes) return undefined;
-  return readCursorTimes[userId] ?? readCursorTimes[userId.toLowerCase()];
-}
-
-/** Peers who read the message; the sender is never counted as a reader. */
 export function getMessageReaders(
   messageId: string,
   senderId: string,
   members: User[],
-  readCursors: Record<string, string>,
-  readCursorTimes?: Record<string, string>,
-  messageCreatedAt?: string | null
+  readCursors: Record<string, string>
 ): MessageReader[] {
   const senderKey = senderId.trim().toLowerCase();
   if (!senderKey) return [];
   return members
     .filter((m) => m.id.trim().toLowerCase() !== senderKey)
-    .filter((m) =>
-      isMessageReadByCursor(
-        messageId,
-        readCursorForUser(readCursors, m.id),
-        readCursorTimeForUser(readCursorTimes, m.id),
-        messageCreatedAt
-      )
-    )
+    .filter((m) => isMessageReadByCursor(messageId, readCursorForUser(readCursors, m.id)))
     .map((m) => ({
       id: m.id,
       username: m.username,
@@ -75,18 +43,17 @@ export function isMessageReadByAnyPeer(
   messageId: string,
   senderId: string,
   members: User[],
-  readCursors: Record<string, string>,
-  readCursorTimes?: Record<string, string>,
-  messageCreatedAt?: string | null
+  readCursors: Record<string, string>
 ): boolean {
-  return (
-    getMessageReaders(
-      messageId,
-      senderId,
-      members,
-      readCursors,
-      readCursorTimes,
-      messageCreatedAt
-    ).length > 0
-  );
+  return getMessageReaders(messageId, senderId, members, readCursors).length > 0;
+}
+
+/** Обновить курсор только если incoming >= current. */
+export function mergeReadCursor(
+  current: string | undefined,
+  incoming: string
+): string {
+  const inc = incoming.trim().toLowerCase();
+  if (!current) return inc;
+  return compareMessageId(inc, current) >= 0 ? inc : current.trim().toLowerCase();
 }

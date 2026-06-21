@@ -1,19 +1,13 @@
 import type { Message } from "@melon/shared";
+import { compareMessageId } from "@melon/shared";
+
+export { compareMessageId };
 
 export type UnreadBounds = {
   first: Message | null;
   last: Message | null;
   count: number;
 };
-
-/** TimeUUID strings compare chronologically when normalized to lowercase hex. */
-export function compareMessageId(a: string, b: string): number {
-  const na = a.trim().toLowerCase();
-  const nb = b.trim().toLowerCase();
-  if (na < nb) return -1;
-  if (na > nb) return 1;
-  return 0;
-}
 
 /** Case-insensitive lookup — message ids may differ in hex casing. */
 export function findMessageElement(listEl: HTMLElement, messageId: string): HTMLElement | null {

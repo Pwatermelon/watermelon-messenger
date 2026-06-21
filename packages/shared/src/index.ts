@@ -4,6 +4,7 @@ export type ChatType = "dm" | "group";
 export type SubscriptionTier = "free" | "platinum";
 
 export * from "./birthday";
+export * from "./timeUuid";
 
 /** Max messages kept per chat; older ones are removed silently on new sends. */
 export const MAX_CHAT_MESSAGES = 1000;

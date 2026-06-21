@@ -12,10 +12,7 @@ export async function advanceReadCursor(
     return { advanced: false, messageId: null, updatedAt: null };
   }
   const row = await scyllaGetMessage(chatId, target);
-  if (!row) {
-    return { advanced: false, messageId: null, updatedAt: null };
-  }
-  const canonicalId = String(row.message_id).trim().toLowerCase();
+  const canonicalId = row ? String(row.message_id).trim().toLowerCase() : target;
   const { advanced, messageId: cursorId, updatedAt } = await upsertReadCursor(chatId, userId, canonicalId);
   // Always reset counter — cursor may already be advanced but postgres counter can be stale.
   await resetUnreadCount(chatId, userId);

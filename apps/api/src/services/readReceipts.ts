@@ -1,3 +1,4 @@
+import { isMessageIdNewer } from "@melon/shared";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 
@@ -8,13 +9,8 @@ function rowsFromExecute<T>(result: unknown): T[] {
   return Array.isArray(rows) ? (rows as T[]) : [];
 }
 
-/** TimeUUID strings compare chronologically when from the same generator. */
 function normalizeMessageId(id: string): string {
   return id.trim().toLowerCase();
-}
-
-function isNewerMessageId(a: string, b: string): boolean {
-  return normalizeMessageId(a) > normalizeMessageId(b);
 }
 
 export async function getReadCursors(chatId: string): Promise<ReadCursorRow[]> {
@@ -56,7 +52,7 @@ export async function upsertReadCursor(
       : new Date(String(rows[0].updated_at)).toISOString()
     : new Date().toISOString();
 
-  if (prev && !isNewerMessageId(normalized, prev)) {
+  if (prev && !isMessageIdNewer(normalized, prev)) {
     return { advanced: false, messageId: normalizeMessageId(prev), updatedAt: prevUpdatedAt };
   }
 
@@ -68,7 +64,7 @@ export async function upsertReadCursor(
       last_read_message_id = EXCLUDED.last_read_message_id,
       updated_at = EXCLUDED.updated_at
   `);
-  return { advanced: !prev || isNewerMessageId(normalized, prev), messageId: normalized, updatedAt };
+  return { advanced: !prev || isMessageIdNewer(normalized, prev), messageId: normalized, updatedAt };
 }
 
 export async function getUserReadCursorsByChat(userId: string): Promise<Map<string, string>> {
