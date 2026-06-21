@@ -229,6 +229,17 @@ export default function ChatLayout() {
   }, []);
 
   useEffect(() => {
+    const onChatRemoved = (e: Event) => {
+      const chatId = (e as CustomEvent<{ chatId?: string }>).detail?.chatId;
+      if (!chatId) return;
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
+      if (chatId === activeChatIdRef.current) closeChat();
+    };
+    window.addEventListener("wm:chat-removed", onChatRemoved);
+    return () => window.removeEventListener("wm:chat-removed", onChatRemoved);
+  }, [closeChat]);
+
+  useEffect(() => {
     const onRefresh = () => refreshChats();
     window.addEventListener("wm:refresh-chats", onRefresh);
     return () => window.removeEventListener("wm:refresh-chats", onRefresh);

@@ -15,7 +15,7 @@ import { blockRoutes } from "./routes/blocks";
 import { stickerPackRoutes } from "./routes/stickerPacks";
 import { uploadRoutes } from "./routes/upload";
 import { mediaRoutes } from "./routes/media";
-import { wsHandlers, setWSServer, setupRedisSubscriber } from "./ws";
+import { wsHandlers, setupRedisSubscriber } from "./ws";
 import { initScylla } from "./services/scylla";
 import { startMetricsRefresh, trackHttpRequest } from "./services/prometheus";
 import { db } from "./db";
@@ -210,7 +210,6 @@ async function main() {
   app.listen({ port: PORT, hostname: "0.0.0.0" });
   const server = (app as { server?: { publish: (topic: string, data: string) => number } }).server;
   if (server) {
-    setWSServer(server);
     setupRedisSubscriber(server);
   }
   console.log(`API + WS on http://localhost:${PORT}`);

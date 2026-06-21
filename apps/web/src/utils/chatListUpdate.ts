@@ -1,7 +1,16 @@
 import type { Chat, Message } from "@melon/shared";
 import { messagePreviewText } from "./messagePreview";
 
-/** Keep server rows as source of truth; retain local-only chats (e.g. just-created DM before list refresh). */
+/** Chats created locally and not yet returned by GET /chats (race after new DM). */
+const LOCAL_ONLY_MAX_AGE_MS = 90_000;
+
+function isPendingLocalChat(chat: Chat): boolean {
+  const createdAt = chat.createdAt ? Date.parse(chat.createdAt) : NaN;
+  if (!Number.isFinite(createdAt)) return false;
+  return Date.now() - createdAt < LOCAL_ONLY_MAX_AGE_MS;
+}
+
+/** Keep server rows as source of truth; retain very recent local-only chats (e.g. just-created DM). */
 export function mergeChatLists(local: Chat[], server: Chat[]): Chat[] {
   const serverIds = new Set(server.map((c) => c.id));
   const localById = new Map(local.map((c) => [c.id, c]));
@@ -14,7 +23,7 @@ export function mergeChatLists(local: Chat[], server: Chat[]): Chat[] {
     const unreadCount = localUnread === 0 && serverUnread > 0 ? 0 : serverUnread;
     return { ...s, unreadCount };
   });
-  const localOnly = local.filter((c) => !serverIds.has(c.id));
+  const localOnly = local.filter((c) => !serverIds.has(c.id) && isPendingLocalChat(c));
   return sortChatsByRecent([...merged, ...localOnly]);
 }
 

@@ -1574,6 +1574,7 @@ export default function ChatRoom({ chatId, onClose, openProfile, onSyncPreview: 
       await deleteChat(chatId);
       setDeleteChatConfirmOpen(false);
       setContactInfoOpen(false);
+      window.dispatchEvent(new CustomEvent("wm:chat-removed", { detail: { chatId } }));
       window.dispatchEvent(new Event("wm:refresh-chats"));
       onClose();
     } catch (e) {

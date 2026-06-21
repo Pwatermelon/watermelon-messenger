@@ -29,16 +29,9 @@ function send(ws: ServerWebSocket<WSData>, msg: WSServerMessage): void {
   ws.send(JSON.stringify(msg));
 }
 
-let wsServerRef: { publish: (topic: string, data: string) => number } | null = null;
-
-export function setWSServer(server: { publish: (topic: string, data: string) => number }) {
-  wsServerRef = server;
-}
-
 export async function publishChatEvent(chatId: string, payload: WSServerMessage): Promise<void> {
   const data = JSON.stringify(payload);
   await redis.publishToChat(chatId, data);
-  wsServerRef?.publish(chatTopic(chatId), data);
 }
 
 function chatTopic(chatId: string) {
