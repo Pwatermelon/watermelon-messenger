@@ -317,12 +317,12 @@ export const wsHandlers = {
           send(ws, { type: "error", error: "Not a member of this chat" });
           return;
         }
-        const { advanced, messageId: resolvedId, updatedAt } = await advanceReadCursor(
+        const { messageId: resolvedId, updatedAt } = await advanceReadCursor(
           chatId,
           ws.data.userId,
           messageId
         );
-        if (advanced && resolvedId) {
+        if (resolvedId) {
           await publishChatEvent(chatId, {
             type: "read_receipt",
             chatId,

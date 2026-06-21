@@ -12,16 +12,12 @@ describe("isMessageReadByCursor", () => {
     expect(isMessageReadByCursor(laterId, msgId, readAt, msgAt)).toBe(false);
   });
 
+  test("exact cursor counts as read even with stale timestamp", () => {
+    expect(isMessageReadByCursor(msgId, msgId, staleReadAt, msgAt)).toBe(true);
+  });
+
   test("exact cursor without timestamps counts as read", () => {
     expect(isMessageReadByCursor(msgId, msgId)).toBe(true);
-  });
-
-  test("exact cursor with stale timestamp is not read", () => {
-    expect(isMessageReadByCursor(msgId, msgId, staleReadAt, msgAt)).toBe(false);
-  });
-
-  test("exact cursor updated after message is read", () => {
-    expect(isMessageReadByCursor(msgId, msgId, readAt, msgAt)).toBe(true);
   });
 
   test("cursor ahead without timestamps is not read", () => {

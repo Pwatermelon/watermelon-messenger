@@ -3,18 +3,6 @@ import { compareMessageId } from "./chatUnread";
 
 const READ_SKEW_MS = 2500;
 
-/** null = timestamps absent or unparsable (caller decides). */
-function cursorTimeCoversMessage(
-  lastReadUpdatedAt: string | null | undefined,
-  messageCreatedAt: string | null | undefined
-): boolean | null {
-  if (!messageCreatedAt || !lastReadUpdatedAt) return null;
-  const msgAt = Date.parse(messageCreatedAt);
-  const curAt = Date.parse(lastReadUpdatedAt);
-  if (!Number.isFinite(msgAt) || !Number.isFinite(curAt)) return null;
-  return curAt + READ_SKEW_MS >= msgAt;
-}
-
 export function isMessageReadByCursor(
   messageId: string,
   lastReadMessageId: string | null | undefined,
@@ -25,15 +13,16 @@ export function isMessageReadByCursor(
   const cmp = compareMessageId(lastReadMessageId, messageId);
   if (cmp < 0) return false;
 
-  const timeOk = cursorTimeCoversMessage(lastReadUpdatedAt, messageCreatedAt);
+  // Cursor sits on this message — peer explicitly read through it.
+  if (cmp === 0) return true;
 
-  if (cmp === 0) {
-    if (timeOk === false) return false;
-    return true;
-  }
-
-  // Cursor is ahead — only count as read when read time proves the message already existed.
-  return timeOk === true;
+  // Cursor is ahead: count older messages as read only when read time
+  // proves they already existed (guards stale id backfill after retention clamp).
+  if (!messageCreatedAt || !lastReadUpdatedAt) return false;
+  const msgAt = Date.parse(messageCreatedAt);
+  const curAt = Date.parse(lastReadUpdatedAt);
+  if (!Number.isFinite(msgAt) || !Number.isFinite(curAt)) return false;
+  return curAt + READ_SKEW_MS >= msgAt;
 }
 
 export type MessageReader = {
