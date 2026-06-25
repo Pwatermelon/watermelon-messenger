@@ -37,7 +37,7 @@ interface YandexTokenResponse {
   expires_in: number;
 }
 
-interface YandexUserInfo {
+export interface YandexUserInfo {
   id: string;
   login?: string;
   display_name?: string;
@@ -45,6 +45,35 @@ interface YandexUserInfo {
   default_avatar_id?: string;
   real_name?: string;
   birthday?: string | null;
+}
+
+/** Verified inbox from Yandex, or null when the account has no linked mail. */
+export function resolveVerifiedYandexEmail(info: Pick<YandexUserInfo, "default_email">): string | null {
+  const email = info.default_email?.trim().toLowerCase();
+  return email || null;
+}
+
+export type YandexOAuthErrorCode = "no_email" | "email_conflict";
+
+export class YandexOAuthError extends Error {
+  readonly code: YandexOAuthErrorCode;
+
+  constructor(code: YandexOAuthErrorCode, message: string) {
+    super(message);
+    this.name = "YandexOAuthError";
+    this.code = code;
+  }
+}
+
+export function isYandexOAuthError(error: unknown): error is YandexOAuthError {
+  return error instanceof YandexOAuthError;
+}
+
+export function parseYandexAccountId(raw: unknown): string {
+  if (raw === null || raw === undefined) throw new Error("Yandex account id missing");
+  const id = String(raw).trim();
+  if (!id || id === "undefined" || id === "null") throw new Error("Yandex account id invalid");
+  return id;
 }
 
 function isAdminYandex(info: YandexUserInfo): boolean {
@@ -146,9 +175,9 @@ export async function exchangeYandexCode(
   if (!infoRes.ok) throw new Error("User info failed");
   const info = (await infoRes.json()) as YandexUserInfo;
 
-  const yandexId = String(info.id);
+  const yandexId = parseYandexAccountId(info.id);
   const yandexLogin = normalizeYandexLogin(info.login);
-  const email = info.default_email ?? `${info.login ?? yandexId}@yandex.ru`;
+  const verifiedEmail = resolveVerifiedYandexEmail(info);
   const username = (info.display_name ?? info.real_name ?? info.login ?? `user_${yandexId.slice(0, 8)}`).slice(
     0,
     100
@@ -157,14 +186,44 @@ export async function exchangeYandexCode(
   const birthday = parseYandexBirthday(info.birthday);
   const makeAdmin = isAdminYandex(info);
 
+  const insertYandexUser = async (registrationEmail: string) =>
+    db
+      .insert(users)
+      .values({
+        email: registrationEmail,
+        username,
+        yandexId,
+        yandexLogin,
+        avatarUrl,
+        birthday,
+        subscriptionTier: "free",
+        betaApproved: makeAdmin,
+        isAdmin: makeAdmin,
+      })
+      .returning();
+
   let [user] = await db.select().from(users).where(eq(users.yandexId, yandexId)).limit(1);
   if (!user) {
-    const [byEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (!verifiedEmail) {
+      throw new YandexOAuthError(
+        "no_email",
+        "В Яндекс ID не привязана почта. Создайте или привяжите email в настройках Яндекса и войдите снова."
+      );
+    }
+
+    const [byEmail] = await db.select().from(users).where(eq(users.email, verifiedEmail)).limit(1);
     if (byEmail) {
+      if (byEmail.yandexId && byEmail.yandexId !== yandexId) {
+        throw new YandexOAuthError(
+          "email_conflict",
+          "Эта почта уже привязана к другому аккаунту Watermelon."
+        );
+      }
       [user] = await db
         .update(users)
         .set({
           yandexId,
+          username,
           yandexLogin: yandexLogin ?? byEmail.yandexLogin,
           avatarUrl: avatarUrl ?? byEmail.avatarUrl,
           birthday: birthday ?? byEmail.birthday,
@@ -174,20 +233,7 @@ export async function exchangeYandexCode(
         .where(eq(users.id, byEmail.id))
         .returning();
     } else {
-      [user] = await db
-        .insert(users)
-        .values({
-          email,
-          username,
-          yandexId,
-          yandexLogin,
-          avatarUrl,
-          birthday,
-          subscriptionTier: "free",
-          betaApproved: makeAdmin,
-          isAdmin: makeAdmin,
-        })
-        .returning();
+      [user] = await insertYandexUser(verifiedEmail);
     }
   } else {
     const updates: Partial<typeof users.$inferInsert> = {};

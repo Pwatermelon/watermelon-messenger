@@ -8,6 +8,9 @@ const ERRORS: Record<string, string> = {
   yandex_denied: "Авторизация отменена",
   yandex_failed: "Не удалось войти через Яндекс",
   yandex_not_configured: "Yandex OAuth не настроен на сервере",
+  yandex_no_email:
+    "В Яндекс ID не привязана почта. Создайте или привяжите email в настройках Яндекса и войдите снова.",
+  yandex_email_conflict: "Эта почта уже привязана к другому аккаунту Watermelon.",
 };
 
 export default function Login() {
@@ -42,7 +45,10 @@ export default function Login() {
 
         <div className="login-card">
           <h2>Вход</h2>
-          <p className="login-hint">Используйте Яндекс ID — это единственный способ авторизации</p>
+          <p className="login-hint">
+            Используйте Яндекс ID — это единственный способ авторизации. В аккаунте Яндекса должна быть
+            привязана почта.
+          </p>
 
           {errorCode && ERRORS[errorCode] && (
             <p className="auth-error">{ERRORS[errorCode]}</p>

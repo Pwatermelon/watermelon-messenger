@@ -16,6 +16,7 @@ import {
   exchangeYandexCode,
   getOAuthConfig,
   isYandexConfigured,
+  isYandexOAuthError,
   resolveRedirectUri,
   verifyOAuthState,
   YANDEX_REDIRECT_URI,
@@ -83,6 +84,10 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       return await exchangeYandexCode(body.code.trim(), redirectUri);
     } catch (e) {
       console.error("[Yandex OAuth exchange]", e);
+      if (isYandexOAuthError(e)) {
+        set.status = 400;
+        return { error: e.message, code: e.code };
+      }
       set.status = 401;
       return { error: e instanceof Error ? e.message : "OAuth failed" };
     }
@@ -103,6 +108,9 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       return Response.redirect(`${WEB_URL}/auth/callback?token=${encodeURIComponent(token)}`, 302);
     } catch (e) {
       console.error("[Yandex OAuth callback]", e);
+      if (isYandexOAuthError(e)) {
+        return Response.redirect(`${WEB_URL}/login?error=yandex_${e.code}`, 302);
+      }
       return Response.redirect(`${WEB_URL}/login?error=yandex_failed`, 302);
     }
   })

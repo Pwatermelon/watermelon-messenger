@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { parseProfilePhotos } from "../lib/userDto";
-import { resolveRedirectUri } from "../services/yandexOAuth";
+import {
+  parseYandexAccountId,
+  resolveRedirectUri,
+  resolveVerifiedYandexEmail,
+  YandexOAuthError,
+} from "../services/yandexOAuth";
 
 describe("parseProfilePhotos", () => {
   test("returns empty for null", () => {
@@ -31,6 +36,29 @@ describe("yandex redirect uri", () => {
 
   test("rejects unknown redirect", () => {
     expect(() => resolveRedirectUri("https://evil.com/callback")).toThrow("not allowed");
+  });
+});
+
+describe("yandex registration identity", () => {
+  test("normalizes verified email", () => {
+    expect(resolveVerifiedYandexEmail({ default_email: " Ivan@Mail.ru " })).toBe("ivan@mail.ru");
+  });
+
+  test("treats blank default_email as missing", () => {
+    expect(resolveVerifiedYandexEmail({ default_email: "   " })).toBeNull();
+    expect(resolveVerifiedYandexEmail({})).toBeNull();
+  });
+
+  test("rejects invalid yandex ids", () => {
+    expect(() => parseYandexAccountId(undefined)).toThrow("missing");
+    expect(() => parseYandexAccountId("")).toThrow("invalid");
+    expect(parseYandexAccountId(123456)).toBe("123456");
+  });
+
+  test("oauth errors expose stable codes", () => {
+    const err = new YandexOAuthError("no_email", "Нужна почта");
+    expect(err.code).toBe("no_email");
+    expect(err.message).toBe("Нужна почта");
   });
 });
 
