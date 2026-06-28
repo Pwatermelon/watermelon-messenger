@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "generate:icons": "node scripts/generate-icons.mjs",
+    "export:favicon": "node scripts/export-favicon-ico.mjs",
     "indexnow:ping": "node scripts/indexnow-ping.mjs",
     "dev:api": "bun run --cwd apps/api dev",
     "dev:web": "bun run --cwd apps/web dev",
