@@ -1,4 +1,4 @@
-import type { AttachmentMetadata, ChatFolder, ChatSharedCategory, ChatSharedItem, MessageType, StickerItem, StickerPackDetail, StickerPackSummary, User } from "@melon/shared";
+import type { AttachmentMetadata, Chat, ChatFolder, ChatSharedCategory, ChatSharedItem, MessageType, StickerItem, StickerPackDetail, StickerPackSummary, User } from "@melon/shared";
 import { getApiUrl } from "./config";
 
 function getToken(): string | null {
@@ -28,15 +28,7 @@ export async function getChats(): Promise<
 export type DmResolveResult =
   | {
       draft: false;
-      chat: {
-        id: string;
-        type: string;
-        name: string | null;
-        createdAt: string;
-        lastMessageAt: string | null;
-        lastMessagePreview: string | null;
-        members: Array<{ id: string; username: string; avatarUrl: string | null; subscriptionTier?: string; role: string }>;
-      };
+      chat: Chat;
     }
   | {
       draft: true;

@@ -6,7 +6,7 @@ import AdminConsoleModal from "../components/AdminConsoleModal";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketContext } from "../context/WebSocketContext";
 import { useActiveChat } from "../context/ActiveChatContext";
-import { getChats, getChat, resolveDm, sendDmMessage, createGroup, searchUser, getContacts, addContact, uploadFile, getChatFolders, markChatReadAllApi, addChatToFolderApi, removeChatFromFolderApi, deleteChat } from "../api";
+import { getChats, getChat, resolveDm, createGroup, searchUser, getContacts, addContact, uploadFile, getChatFolders, markChatReadAllApi, addChatToFolderApi, removeChatFromFolderApi, deleteChat } from "../api";
 import type { Chat, ChatFolder, User, Message } from "@melon/shared";
 import { VIRTUAL_FOLDER_ALL } from "@melon/shared";
 import { mediaUrl } from "../utils/mediaUrl";
