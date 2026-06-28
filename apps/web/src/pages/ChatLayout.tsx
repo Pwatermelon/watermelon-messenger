@@ -23,6 +23,7 @@ import { APP_VERSION } from "../version";
 import { applyMessageToChatList, mergeChatLists, upsertChatInList } from "../utils/chatListUpdate";
 import { playMessageSound } from "../utils/messageSounds";
 import { useCompactLayout } from "../hooks/useCompactLayout";
+import { useMobileBackHandler } from "../hooks/useMobileBackHandler";
 import {
   ChatListContextMenu,
   filterChatsByFolder,
@@ -30,6 +31,7 @@ import {
   saveActiveFolderId,
   type ChatListMenuState,
 } from "../components/ChatListContextMenu";
+import AppReportButton from "../components/AppReportButton";
 
 function EmptyChat() {
   return (
@@ -89,6 +91,15 @@ export default function ChatLayout() {
   const [chatListMenu, setChatListMenu] = useState<ChatListMenuState | null>(null);
   const [profileUserId, setProfileUserId] = useState<string | null | undefined>(undefined);
   const [draftDmPeer, setDraftDmPeer] = useState<User | null>(null);
+  const chatOpen = !!(activeChatId || draftDmPeer);
+  const { closeChatWithHistory } = useMobileBackHandler({
+    compact,
+    chatOpen,
+    onCloseChat: () => {
+      closeChat();
+      setDraftDmPeer(null);
+    },
+  });
   const newChatMenuRef = useRef<HTMLDivElement>(null);
   const subscribedChatsRef = useRef<Set<string>>(new Set());
   const seenWsMessagesRef = useRef(new Set<string>());
@@ -243,6 +254,19 @@ export default function ChatLayout() {
       navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
     }
   }, [location.state, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    const onPopState = () => {
+      window.setTimeout(() => {
+        if (window.location.pathname === "/login") {
+          navigate("/", { replace: true });
+        }
+      }, 0);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [user, navigate]);
 
   useEffect(() => {
     if (!ready) {
@@ -462,8 +486,7 @@ export default function ChatLayout() {
   }
 
   function closeActiveChat() {
-    closeChat();
-    setDraftDmPeer(null);
+    closeChatWithHistory();
   }
 
   async function startDm(otherUserId: string): Promise<boolean> {
@@ -623,7 +646,7 @@ export default function ChatLayout() {
 
   return (
     <div
-      className={`layout${activeChatId || draftDmPeer ? " layout-chat-open" : ""}${compact ? " layout-compact" : ""}`}
+      className={`layout${chatOpen ? " layout-chat-open" : ""}${compact ? " layout-compact" : ""}`}
       data-testid="messenger-shell"
     >
       <aside className="sidebar">
@@ -1051,6 +1074,8 @@ export default function ChatLayout() {
           onCancel={() => setGroupAvatarCropFile(null)}
         />
       )}
+
+      <AppReportButton />
     </div>
   );
 }

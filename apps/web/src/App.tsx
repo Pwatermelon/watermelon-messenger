@@ -17,7 +17,6 @@ import Faq from "./pages/Faq";
 import NotFound from "./pages/NotFound";
 import CookieBanner from "./components/CookieBanner";
 import YandexMetrika from "./components/YandexMetrika";
-import AppReportButton from "./components/AppReportButton";
 import LegalGate from "./components/LegalGate";
 import RouteMeta from "./components/RouteMeta";
 
@@ -46,8 +45,6 @@ function ProfileRedirect() {
 }
 
 export default function App() {
-  const { user, isLoading } = useAuth();
-
   return (
     <LegalGate>
       <YandexMetrika />
@@ -77,7 +74,6 @@ export default function App() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
-      {user && !isLoading && <AppReportButton />}
     </LegalGate>
   );
 }

@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getApiUrl } from "../config";
 import type { User } from "@melon/shared";
 
 export default function AuthCallback() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const { setSession } = useAuth();
   const [error, setError] = useState("");
 
@@ -24,15 +23,15 @@ export default function AuthCallback() {
         const user = (await r.json()) as User;
         setSession(token, user);
         if (!user.betaApproved) {
-          navigate("/beta/pending", { replace: true });
+          window.location.replace("/beta/pending");
         } else if (!localStorage.getItem("wm_beta_welcome_seen")) {
-          navigate("/beta/welcome", { replace: true });
+          window.location.replace("/beta/welcome");
         } else {
-          navigate("/", { replace: true });
+          window.location.replace("/");
         }
       })
       .catch(() => setError("Ошибка авторизации"));
-  }, [params, setSession, navigate]);
+  }, [params, setSession]);
 
   return (
     <div className="auth-page">

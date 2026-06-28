@@ -7795,6 +7795,7 @@ video.message-circle {
     overflow: hidden;
   }
   .layout.layout-compact .main { flex: 1; min-height: 0; overflow: hidden; }
+  .layout.layout-compact:not(.layout-chat-open) .app-report-fab { display: none; }
   .profile-overlay .profile-modal { width: 100%; border-radius: 12px 12px 0 0; align-self: flex-end; }
   .record-circle-preview { width: 150px; height: 150px; }
   .voice-player { max-width: min(280px, 72vw); }
@@ -8373,10 +8374,6 @@ video.message-circle {
   opacity: 1;
   color: var(--accent);
   border-color: rgba(232, 72, 85, 0.45);
-}
-
-.layout.layout-compact:not(.layout-chat-open) .app-report-fab {
-  display: none;
 }
 
 .report-modal-overlay {

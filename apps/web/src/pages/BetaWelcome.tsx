@@ -4,7 +4,7 @@ import { BrandIcon } from "../components/BrandIcon";
 export default function BetaWelcome() {
   function enter() {
     localStorage.setItem("wm_beta_welcome_seen", "1");
-    window.location.href = "/";
+    window.location.replace("/");
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getApiUrl } from "../config";
 import { BrandIcon } from "../components/BrandIcon";
@@ -47,8 +47,7 @@ export default function Login() {
   }
 
   if (user) {
-    window.location.replace("/");
-    return null;
+    return <Navigate to="/" replace />;
   }
 
   const canLogin = oauthReady !== false && pdConsent && legalCfg !== null;
