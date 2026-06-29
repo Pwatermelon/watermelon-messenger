@@ -1681,7 +1681,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
     }
   }
 
-  if (!chatId) return null;
+  if (!chatId && !isDraft) return null;
 
   return (
     <>
