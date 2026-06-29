@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { LEGAL } from "../config/legal";
 import { useTheme } from "../context/ThemeContext";
-import { updateProfile, uploadFile, getLegalStatus, getCoinBalance, getCoinTopupInfo } from "../api";
+import { updateProfile, uploadFile, getLegalStatus, getCoinTopupInfo } from "../api";
 import { mediaUrl } from "../utils/mediaUrl";
 import { compressImage } from "../utils/imageCompress";
 import { subscribeToPush, unsubscribeFromPush, isPushServerConfigured } from "../lib/pushNotifications";
@@ -70,13 +70,7 @@ export default function SettingsModal({ onClose, onOpenAdmin }: Props) {
   const [chatFoldersOpen, setChatFoldersOpen] = useState(false);
   const [legalUpToDate, setLegalUpToDate] = useState<boolean | null>(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
-  const [coinBalance, setCoinBalance] = useState<number | null>(user?.coinBalance ?? null);
-  const [topupInfo, setTopupInfo] = useState<{
-    userId: string;
-    donationAlertsUrl: string | null;
-    messageHint: string;
-  } | null>(null);
-  const [idCopied, setIdCopied] = useState(false);
+  const [topupInfo, setTopupInfo] = useState<{ donationAlertsUrl: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const yandexLogin = user?.yandexLogin ?? null;
@@ -90,12 +84,6 @@ export default function SettingsModal({ onClose, onOpenAdmin }: Props) {
   }, []);
 
   useEffect(() => {
-    void getCoinBalance()
-      .then(({ coins, user: fresh }) => {
-        setCoinBalance(coins);
-        updateUser(fresh);
-      })
-      .catch(() => setCoinBalance(user?.coinBalance ?? 0));
     void getCoinTopupInfo()
       .then(setTopupInfo)
       .catch(() => setTopupInfo(null));
@@ -115,18 +103,6 @@ export default function SettingsModal({ onClose, onOpenAdmin }: Props) {
       );
     }
   }, []);
-
-  async function copyUserId() {
-    const id = topupInfo?.userId ?? user?.id;
-    if (!id) return;
-    try {
-      await navigator.clipboard.writeText(`wm:${id}`);
-      setIdCopied(true);
-      setTimeout(() => setIdCopied(false), 2000);
-    } catch {
-      setMessage("Не удалось скопировать ID");
-    }
-  }
 
   async function copyLogin() {
     if (!yandexLogin) return;
@@ -430,34 +406,19 @@ export default function SettingsModal({ onClose, onOpenAdmin }: Props) {
               </div>
             </section>
 
-            <section className="settings-card">
-              <h3 className="settings-card-title">Поддержка проекта</h3>
-              <div className="settings-coins-balance">
-                <span className="settings-coins-value">{coinBalance ?? user?.coinBalance ?? 0}</span>
-                <span className="settings-coins-label">коинов — подарок за поддержку</span>
-              </div>
-              <p className="settings-card-hint">
-                Коины — просто подарок за поддержку развития проекта. Помогать необязательно. Если
-                захотите, скопируйте ID и укажите его в сообщении на странице поддержки — начисление
-                произойдёт автоматически, если аккаунт с таким ID есть в мессенджере.
-              </p>
-              <button type="button" className="btn settings-coins-copy-id" onClick={() => void copyUserId()}>
-                {idCopied ? "ID скопирован ✓" : "Скопировать ID"}
-              </button>
-              {topupInfo?.donationAlertsUrl ? (
+            {topupInfo?.donationAlertsUrl ? (
+              <section className="settings-card settings-card-flat">
                 <a
                   href={topupInfo.donationAlertsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="settings-row-link settings-coins-donate-link"
+                  className="settings-row-link"
                 >
                   <span>Поддержать проект</span>
                   <span className="settings-row-chevron" aria-hidden>›</span>
                 </a>
-              ) : (
-                <p className="settings-card-hint">Страница поддержки пока недоступна.</p>
-              )}
-            </section>
+              </section>
+            ) : null}
 
             <section className="settings-card">
               <h3 className="settings-card-title">Оформление</h3>

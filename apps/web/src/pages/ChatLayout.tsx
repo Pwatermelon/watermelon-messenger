@@ -32,6 +32,9 @@ import {
   type ChatListMenuState,
 } from "../components/ChatListContextMenu";
 import AppReportButton from "../components/AppReportButton";
+import PlatinumBalanceBadge from "../components/PlatinumBalanceBadge";
+import SupportThankYouModal from "../components/SupportThankYouModal";
+import { usePlatinumBalance } from "../hooks/usePlatinumBalance";
 
 function EmptyChat() {
   return (
@@ -53,6 +56,7 @@ export type ChatLayoutOutletContext = {
 
 export default function ChatLayout() {
   const { user } = useAuth();
+  const { balance: platinumBalance, thankYouAmount, dismissThankYou } = usePlatinumBalance(user?.id);
   const { subscribe, send, ready } = useWebSocketContext();
   const navigate = useNavigate();
   const location = useLocation();
@@ -653,15 +657,18 @@ export default function ChatLayout() {
     >
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h2 className="sidebar-title">
-            <BrandIcon size={28} className="sidebar-brand-icon" />
-            <span className="sidebar-title-text">
-              Watermelon
-              <span className="sidebar-version" title={`Версия ${APP_VERSION}`}>
-                v{APP_VERSION}
+          <div className="sidebar-header-left">
+            <h2 className="sidebar-title">
+              <BrandIcon size={28} className="sidebar-brand-icon" />
+              <span className="sidebar-title-text">
+                Watermelon
+                <span className="sidebar-version" title={`Версия ${APP_VERSION}`}>
+                  v{APP_VERSION}
+                </span>
               </span>
-            </span>
-          </h2>
+            </h2>
+            <PlatinumBalanceBadge balance={platinumBalance} />
+          </div>
           <button
             type="button"
             className="sidebar-settings-btn"
@@ -866,6 +873,9 @@ export default function ChatLayout() {
           onClose={() => setSettingsOpen(false)}
           onOpenAdmin={() => setAdminConsoleOpen(true)}
         />
+      )}
+      {thankYouAmount !== null && thankYouAmount > 0 && (
+        <SupportThankYouModal amount={thankYouAmount} onClose={dismissThankYou} />
       )}
       {chatListMenu && (
         <ChatListContextMenu

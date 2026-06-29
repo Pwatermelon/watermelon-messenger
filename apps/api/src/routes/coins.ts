@@ -5,6 +5,7 @@ import { verifyBearerUser } from "./auth";
 import { hmacSha256Hex, timingSafeEqualHex } from "../lib/hmac";
 import { toPrivateProfile } from "../lib/userDto";
 import { fetchCoinBalance, isMelonPaymentConfigured } from "../services/melonPayment";
+import { ensureProfileMediaRegistered, signUserMedia } from "../services/mediaAccess";
 
 const WEBHOOK_SECRET = process.env.MELON_PAYMENT_WEBHOOK_SECRET ?? "";
 const DONATION_ALERTS_URL = process.env.DONATION_ALERTS_URL ?? "";
@@ -128,7 +129,14 @@ export const coinRoutes = new Elysia()
       }
     }
 
-    return { coins, user: toPrivateProfile({ ...u, coinBalance: coins }) };
+    const dto = toPrivateProfile({ ...u, coinBalance: coins });
+    await ensureProfileMediaRegistered(u.id, [
+      dto.avatarUrl,
+      dto.coverUrl,
+      ...dto.profilePhotos,
+      ...dto.avatarHistory,
+    ]);
+    return { coins, user: await signUserMedia(dto, u.id) };
   })
   .get("/coins/topup-info", async ({ request, set }) => {
     const u = await verifyBearerUser(request);
@@ -138,10 +146,6 @@ export const coinRoutes = new Elysia()
     }
 
     return {
-      userId: u.id,
       donationAlertsUrl: DONATION_ALERTS_URL || null,
-      messageHint: `Укажите в сообщении при поддержке: wm:${u.id}`,
-      instructions:
-        "Скопируйте ID и при желании укажите его на странице поддержки. Коины — подарок от проекта, не услуга.",
     };
   });

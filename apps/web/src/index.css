@@ -341,7 +341,104 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.sidebar-header-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-platinum-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 10px;
+  background: var(--platinum-glow);
+  border: 1px solid rgba(201, 184, 150, 0.35);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+[data-theme="light"] .sidebar-platinum-balance {
+  border-color: rgba(154, 133, 96, 0.35);
+}
+
+.sidebar-platinum-star {
+  color: var(--platinum);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.sidebar-platinum-amount {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--platinum);
+}
+
+.support-thanks-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.support-thanks-modal {
+  width: min(100%, 22rem);
+  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: center;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+}
+
+.support-thanks-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 50%;
+  background: var(--platinum-glow);
+  color: var(--platinum);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.support-thanks-modal h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.support-thanks-lead {
+  margin: 0 0 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.support-thanks-amount {
+  color: var(--platinum);
+  font-weight: 700;
+}
+
+.support-thanks-btn {
+  width: 100%;
+  min-height: 44px;
 }
 
 .sidebar-title {

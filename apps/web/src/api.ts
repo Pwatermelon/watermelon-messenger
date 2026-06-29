@@ -329,11 +329,7 @@ export async function getCoinBalance(): Promise<{ coins: number; user: User }> {
   return data;
 }
 
-export async function getCoinTopupInfo(): Promise<{
-  userId: string;
-  donationAlertsUrl: string | null;
-  messageHint: string;
-}> {
+export async function getCoinTopupInfo(): Promise<{ donationAlertsUrl: string | null }> {
   const res = await fetch(`${getApiUrl()}/coins/topup-info`, {
     headers: { Authorization: `Bearer ${getToken()}` },
   });
