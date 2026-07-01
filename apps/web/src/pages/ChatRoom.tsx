@@ -12,9 +12,9 @@ import { LocationPickerModal } from "../components/LocationPickerModal";
 import { LocationPreview } from "../components/LocationPreview";
 import ImageCropModal from "../components/ImageCropModal";
 import ChatInfoModal from "../components/ChatInfoModal";
-import { IconAttach, IconFile, IconLocation, IconPhoto, IconSend, IconTrash, IconVideo, IconBack, IconChevronDown, IconSmile, IconSearch, IconMessageRead } from "../components/Icons";
-import { ChatMessageSearchPanel } from "../components/ChatMessageSearchPanel";
+import { IconAttach, IconFile, IconLocation, IconPhoto, IconSend, IconTrash, IconVideo, IconBack, IconChevronDown, IconSmile, IconSearch } from "../components/Icons";
 import { AppleEmoji } from "../components/AppleEmoji";
+import { ChatMessageSearchPanel } from "../components/ChatMessageSearchPanel";
 import ComposeEmojiStickerPanel from "../components/ComposeEmojiStickerPanel";
 import StickerPackViewModal from "../components/StickerPackViewModal";
 import { getChat, getChats, getMessages, uploadFile, uploadFileWithProgress, removeGroupMember, deleteChat, updateGroup, deleteMessage, editMessage, forwardMessage, signMediaPaths, markChatReadApi, getChatReadCursors, setMessageReaction, sendDmMessage } from "../api";
@@ -2481,7 +2481,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
                     }
                     aria-label="Прочитано"
                   >
-                    <IconMessageRead size={14} />
+                    <AppleEmoji emoji="🍉" size={14} className="message-read-receipt-emoji" />
                   </span>
                 )}
               </div>
