@@ -9104,6 +9104,15 @@ video.message-circle {
 .message-sticker .media-image-shell {
   display: block;
   line-height: 0;
+  width: min(160px, 42vw);
+  height: min(160px, 42vw);
+}
+
+.message-sticker .media-image-shell .media-image,
+.message-sticker .message-sticker-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .message-sticker-img {
@@ -9137,6 +9146,12 @@ video.message-circle {
   border-radius: 8px;
   background: var(--border);
   overflow: hidden;
+}
+
+.sticker-pack-view-item .media-image-shell,
+.sticker-pack-editor-item .media-image-shell {
+  width: 100%;
+  height: 100%;
 }
 
 .sticker-pack-view-item .sticker-pack-thumb,
