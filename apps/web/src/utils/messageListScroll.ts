@@ -1,12 +1,13 @@
 import { findMessageElement } from "./chatUnread";
 
-/** Scroll to the true bottom; optional sentinel avoids flex/subpixel gaps. */
-export function scrollListToBottom(listEl: HTMLElement, endEl?: HTMLElement | null): void {
-  if (endEl) {
-    endEl.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
-  }
+export function isPinnedToBottom(listEl: HTMLElement, slack = 8): boolean {
+  return listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight <= slack;
+}
+
+/** Scroll to the true bottom (scrollTop only — scrollIntoView fights touch/wheel on mobile). */
+export function scrollListToBottom(listEl: HTMLElement, _endEl?: HTMLElement | null): void {
   const maxTop = Math.max(0, listEl.scrollHeight - listEl.clientHeight);
-  if (listEl.scrollTop < maxTop - 1) {
+  if (Math.abs(listEl.scrollTop - maxTop) > 0.5) {
     listEl.scrollTop = maxTop;
   }
 }

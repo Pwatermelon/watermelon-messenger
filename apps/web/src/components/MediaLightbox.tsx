@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MessageVideoPlayer } from "./MessageVideoPlayer";
 import { LightboxDownloadButton } from "./LightboxDownloadButton";
 import { mediaDownloadUrl } from "../utils/mediaUrl";
+import { useAuthenticatedMediaSrc } from "../hooks/useAuthenticatedMediaSrc";
 
 export type MediaLightboxItem = {
   url: string;
@@ -25,6 +26,28 @@ type Props = {
 function itemDownloadHref(item: MediaLightboxItem): string {
   if (item.downloadPath) return mediaDownloadUrl(item.downloadPath, item.fileName);
   return mediaDownloadUrl(item.url, item.fileName);
+}
+
+function LightboxImage({ src, className }: { src: string; className?: string }) {
+  const resolved = useAuthenticatedMediaSrc(src);
+  if (!resolved) return <span className="message-media-skeleton lightbox-media-skeleton" aria-hidden />;
+  return <img src={resolved} alt="" className={className} />;
+}
+
+function LightboxThumb({ item }: { item: MediaLightboxItem }) {
+  const resolved = useAuthenticatedMediaSrc(item.kind === "video" ? item.poster ?? item.url : item.url);
+  if (item.kind === "video") {
+    return resolved ? (
+      <>
+        <img src={resolved} alt="" />
+        <span className="lightbox-thumb-video">▶</span>
+      </>
+    ) : (
+      <span className="lightbox-thumb-video">▶</span>
+    );
+  }
+  if (!resolved) return null;
+  return <img src={resolved} alt="" />;
 }
 
 export default function MediaLightbox({
@@ -114,7 +137,7 @@ export default function MediaLightbox({
               autoPlay
             />
           ) : (
-            <img src={current.url} alt="" className="lightbox-img" />
+            <LightboxImage src={current.url} className="lightbox-img" />
           )}
         </div>
         {items.length > 1 && (
@@ -128,11 +151,7 @@ export default function MediaLightbox({
                 aria-label={`Медиа ${i + 1}`}
                 aria-selected={i === index}
               >
-                {item.kind === "video" ? (
-                  <span className="lightbox-thumb-video">▶</span>
-                ) : (
-                  <img src={item.url} alt="" />
-                )}
+                <LightboxThumb item={item} />
               </button>
             ))}
           </div>

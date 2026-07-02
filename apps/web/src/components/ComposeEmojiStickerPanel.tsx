@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StickerItem, StickerPackDetail, StickerPackSummary } from "@melon/shared";
 import { getStickerPack, getStickerPacksLibrary } from "../api";
 import { EmojiPickerGrid } from "./EmojiPickerPanel";
+import { MediaImage } from "./MediaImage";
 
 type Props = {
   onPickEmoji: (emoji: string) => void;
@@ -107,7 +108,7 @@ export default function ComposeEmojiStickerPanel({ onPickEmoji, onPickSticker, o
                       title={s.emoji}
                       onClick={() => onPickSticker(s, activePack)}
                     >
-                      <img src={s.imageUrl} alt={s.emoji} loading="lazy" />
+                      <MediaImage src={s.imageUrl} alt={s.emoji} eager />
                     </button>
                   ))}
                   </div>

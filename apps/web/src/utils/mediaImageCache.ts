@@ -71,12 +71,10 @@ export async function resolveMediaBlobUrl(path: string): Promise<string> {
       return res.blob();
     })
     .then((blob) => {
-      if (blob.size > MAX_BLOB_CACHE_ITEM_BYTES) {
-        inflight.delete(key);
-        return directUrl;
-      }
       const blobUrl = URL.createObjectURL(blob);
-      touchCache(key, blobUrl, blob.size);
+      if (blob.size <= MAX_BLOB_CACHE_ITEM_BYTES) {
+        touchCache(key, blobUrl, blob.size);
+      }
       inflight.delete(key);
       return blobUrl;
     })

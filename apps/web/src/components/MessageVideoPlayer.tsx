@@ -13,6 +13,7 @@ import {
 } from "../utils/videoMetaCache";
 import { captureVideoFramePoster } from "../utils/videoPoster";
 import { attachVideoPreviewHandlers } from "../utils/videoPreview";
+import { useAuthenticatedMediaSrc } from "../hooks/useAuthenticatedMediaSrc";
 
 function formatTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -55,6 +56,8 @@ export function MessageVideoPlayer({
   autoPlay = false,
   onExpand,
 }: Props) {
+  const playbackSrc = useAuthenticatedMediaSrc(src);
+  const authPoster = useAuthenticatedMediaSrc(poster);
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubbingRef = useRef(false);
@@ -199,8 +202,9 @@ export function MessageVideoPlayer({
 
   useEffect(() => {
     if (dims) return;
+    if (!playbackSrc) return;
     let cancelled = false;
-    void probeVideoMeta(src).then((meta) => {
+    void probeVideoMeta(playbackSrc).then((meta) => {
       if (cancelled || !meta) return;
       setDims({ w: meta.width, h: meta.height });
       if (meta.duration) setMediaDuration(meta.duration);
@@ -208,12 +212,13 @@ export function MessageVideoPlayer({
     return () => {
       cancelled = true;
     };
-  }, [src, dims]);
+  }, [playbackSrc, dims]);
 
   useEffect(() => {
-    if (posterSrc) return;
+    if (authPoster || posterSrc) return;
+    if (!playbackSrc) return;
     let cancelled = false;
-    void captureVideoFramePoster(src).then((blobUrl) => {
+    void captureVideoFramePoster(playbackSrc).then((blobUrl) => {
       if (cancelled || !blobUrl) return;
       setVideoPosterCache(src, blobUrl);
       setPosterSrc(blobUrl);
@@ -221,13 +226,13 @@ export function MessageVideoPlayer({
     return () => {
       cancelled = true;
     };
-  }, [src, posterSrc]);
+  }, [src, playbackSrc, authPoster, posterSrc]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !playbackSrc) return;
     return attachVideoPreviewHandlers(video, () => setShowFrame(true));
-  }, [src]);
+  }, [playbackSrc]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -331,7 +336,7 @@ export function MessageVideoPlayer({
       video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("progress", onProgress);
     };
-  }, [src, metaDuration, refreshBufferedRatio]);
+  }, [playbackSrc, metaDuration, refreshBufferedRatio]);
 
   const startPlayback = useCallback(() => {
     const video = videoRef.current;
@@ -367,7 +372,7 @@ export function MessageVideoPlayer({
     const onReady = () => startPlayback();
     video.addEventListener("loadedmetadata", onReady, { once: true });
     return () => video.removeEventListener("loadedmetadata", onReady);
-  }, [autoPlay, src, unsupported, startPlayback]);
+  }, [autoPlay, playbackSrc, unsupported, startPlayback]);
 
   useEffect(() => {
     if (!isLightbox) {
@@ -401,7 +406,8 @@ export function MessageVideoPlayer({
     boxStyle = { width: size.width, height: size.height };
   }
 
-  const showPoster = !playing && !showFrame && Boolean(posterSrc);
+  const displayPoster = authPoster ?? posterSrc;
+  const showPoster = !playing && !showFrame && Boolean(displayPoster);
 
   function togglePlay(e?: React.MouseEvent) {
     e?.stopPropagation();
@@ -460,15 +466,15 @@ export function MessageVideoPlayer({
         }}
       >
         {showPoster && (
-          <img src={posterSrc!} alt="" className="message-video-poster" draggable={false} />
+          <img src={displayPoster!} alt="" className="message-video-poster" draggable={false} />
         )}
-        {!posterSrc && !showFrame && !playing && (
+        {!displayPoster && !showFrame && !playing && (
           <span className="message-video-skeleton" aria-hidden />
         )}
         <video
           ref={videoRef}
           className={`message-video-el${showPoster ? " is-hidden" : ""}`}
-          src={src}
+          src={playbackSrc ?? undefined}
           playsInline
           preload="auto"
           muted={false}
@@ -477,7 +483,7 @@ export function MessageVideoPlayer({
           controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
           onContextMenu={(e) => e.preventDefault()}
         >
-          <source src={src} type={mime} />
+          {playbackSrc ? <source src={playbackSrc} type={mime} /> : null}
         </video>
         <span className={`message-video-center-play${playing ? " is-playing" : ""}`} aria-hidden>
           {unsupported ? (

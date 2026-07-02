@@ -17,6 +17,7 @@ import { normalizeStickerImage } from "../utils/imageCompress";
 import { useOverlayDismiss } from "../hooks/useOverlayDismiss";
 import EmojiPickerPanel from "./EmojiPickerPanel";
 import { AppleEmoji } from "./AppleEmoji";
+import { MediaImage } from "./MediaImage";
 
 type Props = {
   onClose: () => void;
@@ -267,7 +268,7 @@ export default function StickerPacksSettings({ onClose }: Props) {
             <div className="sticker-pack-editor-grid">
               {viewDetail.stickers.map((s) => (
                 <div key={s.id} className="sticker-pack-editor-item">
-                  <img src={s.imageUrl} alt={s.emoji} className="sticker-pack-thumb" />
+                  <MediaImage src={s.imageUrl} alt={s.emoji} className="sticker-pack-thumb" />
                   <span className="sticker-pack-view-emoji"><AppleEmoji emoji={s.emoji} size={16} /></span>
                 </div>
               ))}
@@ -310,7 +311,7 @@ export default function StickerPacksSettings({ onClose }: Props) {
             <div className="sticker-pack-editor-grid">
               {editDetail.stickers.map((s) => (
                 <div key={s.id} className="sticker-pack-editor-item">
-                  <img src={s.imageUrl} alt={s.emoji} className="sticker-pack-thumb" />
+                  <MediaImage src={s.imageUrl} alt={s.emoji} className="sticker-pack-thumb" />
                   <button
                     type="button"
                     className="sticker-pack-emoji-btn"

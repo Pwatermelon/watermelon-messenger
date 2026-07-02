@@ -4,6 +4,7 @@ import { canPlayMediaUrl } from "../utils/mediaMime";
 import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback";
 import { resolvePlaybackDuration } from "../utils/mediaPlaybackDuration";
 import { attachVideoPreviewHandlers, primeVideoPreviewFrame } from "../utils/videoPreview";
+import { useAuthenticatedMediaSrc } from "../hooks/useAuthenticatedMediaSrc";
 
 const DEFAULT_SIZE = 220;
 
@@ -35,6 +36,8 @@ function angleFromPointer(clientX: number, clientY: number, rect: DOMRect): numb
 }
 
 export function CircleMessagePlayer({ src, duration: metaDuration, size = DEFAULT_SIZE, poster }: Props) {
+  const playbackSrc = useAuthenticatedMediaSrc(src);
+  const authPoster = useAuthenticatedMediaSrc(poster);
   const { outer, ring, ringHit, r, circumference } = useMemo(() => circleMetrics(size), [size]);
   const cx = outer / 2;
 
@@ -51,6 +54,7 @@ export function CircleMessagePlayer({ src, duration: metaDuration, size = DEFAUL
   const [error, setError] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [previewReady, setPreviewReady] = useState(Boolean(poster));
+  const displayPoster = authPoster ?? poster ?? undefined;
   const posterClearedRef = useRef(false);
 
   const duration = resolvePlaybackDuration(metaDuration, mediaDuration);
@@ -265,8 +269,8 @@ export function CircleMessagePlayer({ src, duration: metaDuration, size = DEFAUL
         <video
           ref={videoRef}
           className="circle-player-video"
-          src={src}
-          poster={poster ?? undefined}
+          src={playbackSrc ?? undefined}
+          poster={displayPoster}
           playsInline
           preload="metadata"
           muted={false}

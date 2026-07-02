@@ -2,12 +2,11 @@ import { authMediaHeaders } from "./authToken";
 import { mediaDownloadUrl, mediaUrl } from "./mediaUrl";
 
 function resolveFetchUrl(pathOrUrl: string): string {
-  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://") || pathOrUrl.startsWith("blob:")) {
-    return pathOrUrl;
-  }
-  const url = mediaUrl(pathOrUrl);
-  if (!url) throw new Error("Invalid media URL");
-  return url;
+  if (pathOrUrl.startsWith("blob:")) return pathOrUrl;
+  const normalized = mediaUrl(pathOrUrl);
+  if (normalized) return normalized;
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  throw new Error("Invalid media URL");
 }
 
 /** Загрузка медиа только с Bearer-сессией; сервер проверяет membership в чате. */

@@ -3,6 +3,7 @@ import { IconPlay, IconPause } from "./Icons";
 import { canPlayMediaUrl, mimeFromMediaUrl } from "../utils/mediaMime";
 import { claimMediaPlayback, releaseMediaPlayback } from "../utils/mediaPlayback";
 import { resolvePlaybackDuration } from "../utils/mediaPlaybackDuration";
+import { useAuthenticatedMediaSrc } from "../hooks/useAuthenticatedMediaSrc";
 
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -11,6 +12,7 @@ function formatTime(sec: number): string {
 }
 
 export function VoiceMessagePlayer({ src, duration: metaDuration }: { src: string; duration?: number }) {
+  const playbackSrc = useAuthenticatedMediaSrc(src);
   const audioRef = useRef<HTMLAudioElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubbingRef = useRef(false);
@@ -198,8 +200,8 @@ export function VoiceMessagePlayer({ src, duration: metaDuration }: { src: strin
 
   return (
     <div className="voice-player">
-      <audio ref={audioRef} preload="metadata">
-        <source src={src} type={mime} />
+      <audio ref={audioRef} preload="metadata" src={playbackSrc ?? undefined}>
+        {playbackSrc ? <source src={playbackSrc} type={mime} /> : null}
       </audio>
       <button
         type="button"

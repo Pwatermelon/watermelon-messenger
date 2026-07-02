@@ -9077,11 +9077,20 @@ video.message-circle {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.compose-sticker-btn img {
+.compose-sticker-btn img,
+.compose-sticker-btn .media-image {
   width: 100%;
   aspect-ratio: 1;
   object-fit: contain;
   display: block;
+}
+
+.compose-sticker-btn .media-image-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
 }
 
 .message-sticker {
@@ -9090,6 +9099,11 @@ video.message-circle {
   padding: 0;
   cursor: pointer;
   display: block;
+}
+
+.message-sticker .media-image-shell {
+  display: block;
+  line-height: 0;
 }
 
 .message-sticker-img {
@@ -9126,7 +9140,9 @@ video.message-circle {
 }
 
 .sticker-pack-view-item .sticker-pack-thumb,
-.sticker-pack-editor-item .sticker-pack-thumb {
+.sticker-pack-editor-item .sticker-pack-thumb,
+.sticker-pack-view-item .media-image,
+.sticker-pack-editor-item .media-image {
   width: 100%;
   object-fit: contain;
   display: block;

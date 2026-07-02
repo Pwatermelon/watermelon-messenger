@@ -4,6 +4,7 @@ import { useWebSocketContext } from "../context/WebSocketContext";
 import { ComposeRecorder } from "../components/ComposeRecorder";
 import { VoiceMessagePlayer } from "../components/VoiceMessagePlayer";
 import { CircleMessagePlayer } from "../components/CircleMessagePlayer";
+import { MediaImage } from "../components/MediaImage";
 import { MessageContextMenu } from "../components/MessageContextMenu";
 import { MessageReactions } from "../components/MessageReactions";
 import { ForwardMessageModal } from "../components/ForwardMessageModal";
@@ -45,6 +46,7 @@ import { formatMessageText } from "../utils/formatMessageText";
 import { parseLocationCoords } from "../utils/yandexMaps";
 import {
   capturePrependScroll,
+  isPinnedToBottom,
   restorePrependScroll,
   scrollListToBottom,
   type PrependScrollState,
@@ -112,6 +114,10 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   const listRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
+  const userScrollingRef = useRef(false);
+  const userScrollEndTimerRef = useRef<number | null>(null);
+  const touchScrollStartYRef = useRef<number | null>(null);
   const pendingInitialScrollRef = useRef(false);
   const suppressAutoReadRef = useRef(false);
   const serverUnreadCountRef = useRef(0);
@@ -346,6 +352,8 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       return null;
     });
     stickToBottomRef.current = true;
+    lastScrollTopRef.current = 0;
+    touchScrollStartYRef.current = null;
     pendingInitialScrollRef.current = true;
     setMessagesReady(false);
     suppressAutoReadRef.current = false;
@@ -482,13 +490,40 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
     );
   }, [user?.id]);
 
+  const markUserScrolling = useCallback(() => {
+    userScrollingRef.current = true;
+    if (userScrollEndTimerRef.current != null) {
+      window.clearTimeout(userScrollEndTimerRef.current);
+    }
+    userScrollEndTimerRef.current = window.setTimeout(() => {
+      userScrollingRef.current = false;
+      userScrollEndTimerRef.current = null;
+      const list = listRef.current;
+      if (list && isPinnedToBottom(list, 4)) {
+        stickToBottomRef.current = true;
+      }
+    }, 450);
+  }, []);
+
+  const releaseBottomPin = useCallback(() => {
+    stickToBottomRef.current = false;
+  }, []);
+
   const updateScrollAwayState = useCallback(() => {
     const list = listRef.current;
     if (!list) return;
-    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-    const atBottom = distanceFromBottom < 80;
-    stickToBottomRef.current = atBottom;
-    setAwayFromBottom(!atBottom);
+    const top = list.scrollTop;
+    const prevTop = lastScrollTopRef.current;
+    if (top < prevTop - 0.01) {
+      stickToBottomRef.current = false;
+    } else if (!userScrollingRef.current && isPinnedToBottom(list, 4)) {
+      stickToBottomRef.current = true;
+    } else if (!isPinnedToBottom(list, 12)) {
+      stickToBottomRef.current = false;
+    }
+    lastScrollTopRef.current = top;
+    const distanceFromBottom = list.scrollHeight - top - list.clientHeight;
+    setAwayFromBottom(distanceFromBottom >= 80);
     refreshUnreadJumpCount();
   }, [refreshUnreadJumpCount]);
 
@@ -1062,14 +1097,19 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   }, [chatId]);
 
   const scrollToBottom = useCallback((_instant: boolean) => {
+    if (userScrollingRef.current) return;
     const list = listRef.current;
     if (list) {
       scrollListToBottom(list, messagesEndRef.current);
+      if (isPinnedToBottom(list, 4)) {
+        stickToBottomRef.current = true;
+        setAwayFromBottom(false);
+      }
     } else {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+      stickToBottomRef.current = true;
+      setAwayFromBottom(false);
     }
-    stickToBottomRef.current = true;
-    setAwayFromBottom(false);
   }, []);
 
   const jumpDown = useCallback(() => {
@@ -1105,8 +1145,28 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
     const list = listRef.current;
     if (!list || !messagesReady) return;
     const onScroll = () => {
+      markUserScrolling();
       updateScrollAwayState();
       tryMarkReadFromScroll();
+    };
+    const onWheel = (e: WheelEvent) => {
+      markUserScrolling();
+      if (e.deltaY < 0) releaseBottomPin();
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      markUserScrolling();
+      touchScrollStartYRef.current = e.touches[0]?.clientY ?? null;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      markUserScrolling();
+      const startY = touchScrollStartYRef.current;
+      const y = e.touches[0]?.clientY;
+      if (startY != null && y != null && y - startY > 4) {
+        releaseBottomPin();
+      }
+    };
+    const onTouchEnd = () => {
+      touchScrollStartYRef.current = null;
     };
     const onFocus = () => {
       if (canMarkReadNow()) tryMarkReadFromScroll();
@@ -1115,15 +1175,29 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       if (canMarkReadNow()) tryMarkReadFromScroll();
     };
     list.addEventListener("scroll", onScroll, { passive: true });
+    list.addEventListener("wheel", onWheel, { passive: true });
+    list.addEventListener("touchstart", onTouchStart, { passive: true });
+    list.addEventListener("touchmove", onTouchMove, { passive: true });
+    list.addEventListener("touchend", onTouchEnd, { passive: true });
+    list.addEventListener("touchcancel", onTouchEnd, { passive: true });
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     updateScrollAwayState();
     return () => {
       list.removeEventListener("scroll", onScroll);
+      list.removeEventListener("wheel", onWheel);
+      list.removeEventListener("touchstart", onTouchStart);
+      list.removeEventListener("touchmove", onTouchMove);
+      list.removeEventListener("touchend", onTouchEnd);
+      list.removeEventListener("touchcancel", onTouchEnd);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
+      if (userScrollEndTimerRef.current != null) {
+        window.clearTimeout(userScrollEndTimerRef.current);
+        userScrollEndTimerRef.current = null;
+      }
     };
-  }, [chatId, messagesReady, updateScrollAwayState, tryMarkReadFromScroll]);
+  }, [chatId, messagesReady, markUserScrolling, releaseBottomPin, updateScrollAwayState, tryMarkReadFromScroll]);
 
   useLayoutEffect(() => {
     if (loading && messages.length === 0) return;
@@ -1196,43 +1270,25 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
 
     refreshUnreadJumpCount();
 
-    if (stickToBottomRef.current) {
-      scrollToBottom(false);
-    }
-  }, [messages, loading, loadingOlder, messagesReady, scrollToBottom, refreshUnreadJumpCount]);
+    if (!stickToBottomRef.current || userScrollingRef.current) return;
+    const list = listRef.current;
+    if (!list || !isPinnedToBottom(list, 16)) return;
+    scrollListToBottom(list, messagesEndRef.current);
+  }, [messages, loading, loadingOlder, messagesReady, refreshUnreadJumpCount]);
 
   useEffect(() => {
     if (!messagesReady) return;
     const list = listRef.current;
-    const end = messagesEndRef.current;
-    if (!list || !end) return;
+    if (!list) return;
 
-    let raf = 0;
-    const nudgeBottom = () => {
-      if (!stickToBottomRef.current) return;
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (!stickToBottomRef.current || !listRef.current) return;
-        scrollListToBottom(listRef.current, messagesEndRef.current);
-      });
+    const nudgeBottomIfPinned = () => {
+      if (!stickToBottomRef.current || userScrollingRef.current) return;
+      if (!isPinnedToBottom(list, 16)) return;
+      scrollListToBottom(list, messagesEndRef.current);
     };
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (!entry || !stickToBottomRef.current) return;
-        if (entry.intersectionRatio < 0.99) nudgeBottom();
-      },
-      { root: list, threshold: [0, 0.5, 0.99, 1] }
-    );
-    io.observe(end);
-    list.addEventListener("load", nudgeBottom, true);
-
-    return () => {
-      io.disconnect();
-      list.removeEventListener("load", nudgeBottom, true);
-      cancelAnimationFrame(raf);
-    };
+    list.addEventListener("load", nudgeBottomIfPinned, true);
+    return () => list.removeEventListener("load", nudgeBottomIfPinned, true);
   }, [messagesReady, chatId]);
 
   useEffect(() => {
@@ -2701,7 +2757,12 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
                     if (packId) setStickerPackViewId(packId);
                   }}
                 >
-                  <img src={mediaUrl(m.attachmentUrl)} alt={m.attachmentMetadata?.emoji ?? "Стикер"} className="message-sticker-img" />
+                  <MediaImage
+                    src={m.attachmentUrl}
+                    alt={m.attachmentMetadata?.emoji ?? "Стикер"}
+                    className="message-sticker-img"
+                    eager
+                  />
                 </button>
               )}
               {(m.reactions?.length ?? 0) > 0 && (
