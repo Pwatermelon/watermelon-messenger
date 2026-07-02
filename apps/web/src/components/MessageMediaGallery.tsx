@@ -1,16 +1,37 @@
 import { useState, type CSSProperties } from "react";
 import type { Message, MessageAttachment } from "@melon/shared";
-import { mediaUrl, mediaDownloadUrl } from "../utils/mediaUrl";
-import { getMessageAttachments, isGifAttachment } from "../utils/messageAttachments";
+import { mediaUrl } from "../utils/mediaUrl";
+import {
+  getMessageAttachments,
+  isGifAttachment,
+  isVideoAttachment,
+} from "../utils/messageAttachments";
 import { displayMessageMediaSize } from "../utils/messageMediaSize";
+import { MessageVideoPlayer } from "./MessageVideoPlayer";
+import { IconPlay } from "./Icons";
+import type { MediaLightboxItem } from "./MediaLightbox";
 
 type Props = {
   message: Message;
   priority?: boolean;
-  onOpenLightbox: (urls: string[], downloadHrefs: string[], index: number) => void;
+  onOpenLightbox: (items: MediaLightboxItem[], index: number) => void;
 };
 
-function MediaTile({
+function attachmentToLightboxItem(attachment: MessageAttachment): MediaLightboxItem {
+  const isVideo = isVideoAttachment(attachment);
+  return {
+    url: mediaUrl(attachment.url),
+    kind: isVideo ? "video" : "image",
+    poster: attachment.posterUrl ? mediaUrl(attachment.posterUrl) : null,
+    width: attachment.width,
+    height: attachment.height,
+    duration: attachment.duration,
+    downloadPath: attachment.url,
+    fileName: attachment.fileName,
+  };
+}
+
+function ImageTile({
   attachment,
   count,
   index,
@@ -28,8 +49,6 @@ function MediaTile({
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(src.startsWith("blob:"));
 
-  // Для одиночной картинки заранее резервируем точный контейнер по сохранённым
-  // размерам — чтобы при подгрузке не дёргался скролл (как в Telegram).
   const w = attachment.width;
   const h = attachment.height;
   let reserveStyle: CSSProperties | undefined;
@@ -69,26 +88,87 @@ function MediaTile({
   );
 }
 
+function VideoTile({
+  attachment,
+  count,
+  index,
+  onOpen,
+}: {
+  attachment: MessageAttachment;
+  count: number;
+  index: number;
+  onOpen: (index: number) => void;
+}) {
+  if (count === 1) {
+    return (
+      <div className="message-media-item message-media-item--1 message-media-item--video-inline">
+        <MessageVideoPlayer
+          src={mediaUrl(attachment.url)}
+          poster={attachment.posterUrl ? mediaUrl(attachment.posterUrl) : null}
+          width={attachment.width}
+          height={attachment.height}
+          duration={attachment.duration}
+          onExpand={() => onOpen(index)}
+        />
+      </div>
+    );
+  }
+
+  const posterSrc = attachment.posterUrl ? mediaUrl(attachment.posterUrl) : mediaUrl(attachment.url);
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="message-media-item message-media-item--failed" aria-hidden>
+        <span className="message-media-failed-label">Не удалось загрузить</span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={`message-media-item message-media-item--${count} message-media-item--video`}
+      onClick={() => onOpen(index)}
+    >
+      <img
+        src={posterSrc}
+        alt=""
+        className="message-media-img message-media-video-poster is-loaded"
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+      <span className="message-media-play-badge" aria-hidden>
+        <IconPlay size={28} />
+      </span>
+    </button>
+  );
+}
+
 export function MessageMediaGallery({ message, priority = false, onOpenLightbox }: Props) {
   const attachments = getMessageAttachments(message);
   if (attachments.length === 0) return null;
 
-  const urls = attachments.map((a) => mediaUrl(a.url));
-  const downloadHrefs = attachments.map((a) => mediaDownloadUrl(a.url, a.fileName));
+  const lightboxItems = attachments.map(attachmentToLightboxItem);
   const count = attachments.length;
 
   return (
     <div className={`message-media-grid message-media-grid--${Math.min(count, 5)}`}>
-      {attachments.map((a, i) => (
-        <MediaTile
-          key={`${a.url}-${i}`}
-          attachment={a}
-          count={count}
-          index={i}
-          priority={priority}
-          onOpen={(idx) => onOpenLightbox(urls, downloadHrefs, idx)}
-        />
-      ))}
+      {attachments.map((a, i) =>
+        isVideoAttachment(a) ? (
+          <VideoTile key={`${a.url}-${i}`} attachment={a} count={count} index={i} onOpen={(idx) => onOpenLightbox(lightboxItems, idx)} />
+        ) : (
+          <ImageTile
+            key={`${a.url}-${i}`}
+            attachment={a}
+            count={count}
+            index={i}
+            priority={priority}
+            onOpen={(idx) => onOpenLightbox(lightboxItems, idx)}
+          />
+        )
+      )}
     </div>
   );
 }

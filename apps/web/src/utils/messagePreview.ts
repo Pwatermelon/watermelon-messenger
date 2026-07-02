@@ -11,6 +11,19 @@ export function messagePreviewText(
       if (c && !isDefaultMediaContent(c, "image")) return c.slice(0, 160);
       const album = m.attachmentMetadata?.attachments;
       if (album && album.length > 1) {
+        let photos = 0;
+        let videos = 0;
+        for (const a of album) {
+          if (a.mimeType?.startsWith("video/")) videos += 1;
+          else photos += 1;
+        }
+        if (photos && videos) {
+          const parts: string[] = [];
+          if (photos) parts.push(`${photos} фото`);
+          if (videos) parts.push(`${videos} видео`);
+          return parts.join(" и ");
+        }
+        if (videos) return `${videos} видео`;
         return `${album.length} фото`;
       }
       if (

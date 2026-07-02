@@ -5540,6 +5540,37 @@ a {
   pointer-events: none;
 }
 
+.message-media-item--video {
+  position: relative;
+}
+
+.message-media-item--video-inline {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: default;
+  overflow: hidden;
+}
+
+.message-media-item--video-inline .message-video-player {
+  width: 100%;
+}
+
+.message-media-video-poster {
+  object-fit: cover;
+}
+
+.message-media-play-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  pointer-events: none;
+}
+
 .message-media-item--failed {
   display: flex;
   align-items: center;

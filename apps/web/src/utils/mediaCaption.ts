@@ -2,7 +2,16 @@ import type { Message, MessageType } from "@melon/shared";
 
 export function isDefaultImageContent(content: string): boolean {
   const c = content.trim();
-  return c === "Фотография" || c === "GIF" || /^\d+ фото$/.test(c);
+  return (
+    c === "Фотография" ||
+    c === "GIF" ||
+    /^\d+ фото$/.test(c) ||
+    c === "Видео" ||
+    /^\d+ видео$/.test(c) ||
+    /^\d+ фото и \d+ видео$/.test(c) ||
+    c === "Медиа" ||
+    /^\d+ медиа$/.test(c)
+  );
 }
 
 export function isDefaultMediaContent(
@@ -29,4 +38,9 @@ export function mediaMessageCaption(m: Pick<Message, "content" | "messageType" |
 export function resolveMediaCaption(caption: string | undefined, fallback: string): string {
   const trimmed = caption?.trim();
   return trimmed || fallback;
+}
+
+/** Текст сообщения с медиа: подпись только если она назначена этой части batch. */
+export function resolveMediaPartContent(caption: string | undefined, fallback: string): string {
+  return caption !== undefined ? resolveMediaCaption(caption, fallback) : fallback;
 }

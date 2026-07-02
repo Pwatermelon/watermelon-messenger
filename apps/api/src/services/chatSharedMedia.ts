@@ -109,13 +109,14 @@ function expandMessage(
       if (album?.length) {
         return album.map((a) => ({
           ...base,
-          messageType: "image" as MessageType,
+          messageType: (a.mimeType?.startsWith("video/") ? "video" : "image") as MessageType,
           attachmentUrl: a.url,
           attachmentMetadata: {
             ...meta,
             fileName: a.fileName ?? meta?.fileName,
             mimeType: a.mimeType ?? meta?.mimeType,
             size: a.size ?? meta?.size,
+            posterUrl: a.posterUrl ?? meta?.posterUrl,
           },
         }));
       }

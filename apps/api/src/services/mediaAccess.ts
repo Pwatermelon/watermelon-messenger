@@ -165,6 +165,7 @@ export function normalizeAttachmentMetadataForStorage(
       .map((a) => ({
         ...a,
         url: (a.url ? canonicalUploadsPath(a.url) : null) ?? a.url,
+        ...(a.posterUrl ? { posterUrl: canonicalUploadsPath(a.posterUrl) ?? a.posterUrl } : {}),
       }))
       .filter((a): a is typeof a & { url: string } => Boolean(a.url));
   }
@@ -225,6 +226,7 @@ export async function signAttachmentMetadata(
   const paths: string[] = [];
   for (const a of metadata.attachments ?? []) {
     if (a.url) paths.push(a.url);
+    if (a.posterUrl) paths.push(a.posterUrl);
   }
   if (metadata.posterUrl) paths.push(metadata.posterUrl);
   if (!paths.length) return metadata;
@@ -234,6 +236,7 @@ export async function signAttachmentMetadata(
     next.attachments = next.attachments.map((a) => ({
       ...a,
       url: resolveSignedMediaPath(a.url, signed) ?? a.url,
+      ...(a.posterUrl ? { posterUrl: resolveSignedMediaPath(a.posterUrl, signed) ?? a.posterUrl } : {}),
     }));
   }
   if (next.posterUrl) {

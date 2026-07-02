@@ -116,6 +116,9 @@ export interface MessageAttachment {
   /** Intrinsic pixel size — позволяет зарезервировать место и избежать скачков скролла. */
   width?: number;
   height?: number;
+  /** Poster frame for video items in a mixed album */
+  posterUrl?: string;
+  duration?: number;
 }
 
 /** Attachment metadata (JSON) */

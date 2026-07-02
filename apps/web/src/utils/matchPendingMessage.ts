@@ -6,7 +6,7 @@ function normContent(s: string): string {
 }
 
 function pendingHasAttachment(m: Message): boolean {
-  return Boolean(m.attachmentUrl?.trim());
+  return Boolean(m.attachmentUrl?.trim() || (m.attachmentMetadata?.attachments?.length ?? 0) > 0);
 }
 
 function serverAttachmentKey(m: Message): string | null {
@@ -38,6 +38,11 @@ export function findPendingMessageForServer(prev: Message[], serverMsg: Message)
     }
 
     if (smt === "sticker" || smt === "location") {
+      if (normContent(m.content) === normContent(serverMsg.content)) return i;
+      continue;
+    }
+
+    if (smt === "image" && (serverMsg.attachmentMetadata?.attachments?.length ?? 0) > 1) {
       if (normContent(m.content) === normContent(serverMsg.content)) return i;
       continue;
     }
