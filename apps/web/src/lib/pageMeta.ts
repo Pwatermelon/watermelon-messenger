@@ -14,6 +14,7 @@ export const HOME_PAGE_META: PageMeta = {
   description:
     "Watermelon Messenger — self-hosted мессенджер: личные и групповые чаты, медиа, голосовые сообщения и push-уведомления. Вход через Яндекс ID. Клиенты для iOS, Android и web.",
   canonical: `${SITE_URL}/`,
+  robots: "index, follow",
 };
 
 export const DEFAULT_PAGE_META: PageMeta = {
@@ -33,6 +34,7 @@ const PUBLIC_PAGE_BY_PATH = new Map(
           title: page.title,
           description: page.description,
           canonical: `${SITE_URL}${canonicalPath}`,
+          ...("robots" in page && page.robots ? { robots: page.robots } : {}),
         } satisfies PageMeta,
       ] as const;
     }),
@@ -71,7 +73,7 @@ export function getPageMeta(pathname: string): PageMeta {
     };
   }
 
-  return { ...HOME_PAGE_META, robots: NOINDEX };
+  return HOME_PAGE_META;
 }
 
 function upsertMeta(attr: "name" | "property", key: string, content: string) {

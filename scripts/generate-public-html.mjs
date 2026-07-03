@@ -188,6 +188,7 @@ for (const route of routes) {
     title: route.title,
     description: route.description,
     canonical,
+    robots: route.robots ?? "index, follow",
     ogImageUrl: ogImage,
     jsonLdSchemas: buildJsonLd(route, canonical),
     seoBody: route.seoBody,

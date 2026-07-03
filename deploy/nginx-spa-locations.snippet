@@ -12,6 +12,13 @@
         try_files $uri =404;
     }
 
+    # Корень: home.html (SEO), не index.html (noindex для SPA-оболочки).
+    # Без этого try_files $uri/ находит каталог root и отдаёт index.html из-за директивы index.
+    location = / {
+        try_files /home.html =404;
+        add_header Content-Language ru always;
+    }
+
     location / {
         try_files $uri $uri/ @wm_spa;
     }
