@@ -58,7 +58,12 @@ import {
   scrollListToMessage,
   compareMessageId,
 } from "../utils/chatUnread";
-import { getMessageReaders, isMessageReadByCursor, mergeReadCursor } from "../utils/messageRead";
+import {
+  chatMembersForReadReceipts,
+  isOwnMessageReadByPeers,
+  resolveMarkReadTarget as resolveMarkReadTargetUtil,
+} from "../utils/chatReadReceipts";
+import { getMessageReaders, mergeReadCursor } from "../utils/messageRead";
 import { formatMessageDateLabel, shouldShowDateDivider } from "../utils/messageDates";
 import { captureCirclePoster } from "../utils/circlePoster";
 import { captureVideoPoster } from "../utils/videoPoster";
@@ -146,7 +151,6 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   const selectionMode = selectedIds.size > 0;
   const [readCursors, setReadCursors] = useState<Record<string, string>>({});
   const readCursorsRef = useRef<Record<string, string>>({});
-  const readCursorTimesRef = useRef<Record<string, string>>({});
   const messagesRef = useRef<Message[]>([]);
   const hasMoreOlderRef = useRef(true);
   const [peerActivities, setPeerActivities] = useState<Map<string, PeerActivityKind>>(() => new Map());
@@ -184,14 +188,11 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
 
   function applyReadCursors(rows: { userId: string; lastReadMessageId: string; updatedAt?: string }[]) {
     const map = { ...readCursorsRef.current };
-    const times = { ...readCursorTimesRef.current };
     for (const r of rows) {
       const key = r.userId.toLowerCase();
       map[key] = mergeReadCursor(map[key], r.lastReadMessageId);
-      if (r.updatedAt) times[key] = r.updatedAt;
     }
     readCursorsRef.current = map;
-    readCursorTimesRef.current = times;
     setReadCursors(map);
   }
 
@@ -205,47 +206,13 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   }
 
   function membersForReadReceipts(): User[] {
-    if (chat?.members?.length) return chat.members;
-    if (chat?.type === "dm" && user?.id) {
-      const peer =
-        chat.members.find((m) => m.id.toLowerCase() !== user.id.toLowerCase()) ??
-        Object.keys(readCursorsRef.current)
-          .filter((k) => k !== user.id.toLowerCase())
-          .map((id) => ({ id, username: "?" } as User))[0];
-      if (peer) {
-        return [{ id: user.id, username: user.username ?? "?", avatarUrl: user.avatarUrl } as User, peer];
-      }
-    }
-    return chat?.members ?? [];
+    return chatMembersForReadReceipts(chat, user ?? null, readCursors);
   }
 
   function resolveMarkReadTarget(): string | null {
     const list = messagesRef.current;
     if (!list.length || !user?.id || !listRef.current) return null;
-
-    const userKey = user.id.toLowerCase();
-    const listEl = listRef.current;
-
-    // Внизу чата — прочитано до последнего входящего (своё не двигает курсор).
-    if (stickToBottomRef.current) {
-      for (let i = list.length - 1; i >= 0; i--) {
-        const m = list[i]!;
-        if ((m.messageType ?? "text") === "system") continue;
-        if (m.senderId.toLowerCase() === userKey) continue;
-        return m.id;
-      }
-      return null;
-    }
-
-    // Иначе — самое новое видимое входящее.
-    let best: string | null = null;
-    for (const m of list) {
-      if ((m.messageType ?? "text") === "system") continue;
-      if (m.senderId.toLowerCase() === userKey) continue;
-      if (!isMessageVisibleInViewport(listEl, m.id)) continue;
-      if (!best || compareMessageId(m.id, best) > 0) best = m.id;
-    }
-    return best;
+    return resolveMarkReadTargetUtil(list, listRef.current, user.id);
   }
 
   function persistMarkRead(messageId: string, attempt = 0) {
@@ -295,9 +262,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       persistMarkRead(messageId);
       return;
     }
-    const markedAt = new Date().toISOString();
     readCursorsRef.current[userKey] = normalized;
-    readCursorTimesRef.current[userKey] = markedAt;
     setReadCursors((prev) => ({ ...prev, [userKey]: normalized }));
     lastMarkedReadRef.current = normalized;
     lastMarkedReadChatIdRef.current = chatId;
@@ -336,7 +301,6 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
     setSelectedIds(new Set());
     setReadCursors({});
     readCursorsRef.current = {};
-    readCursorTimesRef.current = {};
     lastMarkedReadRef.current = null;
     lastMarkedReadChatIdRef.current = null;
     lastPersistedReadRef.current = null;
@@ -428,32 +392,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
 
   function isMessageReadByPeers(m: Message): boolean {
     if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return false;
-    if (m.clientPending || m.id.startsWith("pending-")) return false;
-
-    const msgAt = m.createdAt ? Date.parse(m.createdAt) : NaN;
-
-    const peerReadMessage = (peerId: string): boolean => {
-      const peerKey = peerId.trim().toLowerCase();
-      if (!peerKey || peerKey === user.id.toLowerCase()) return false;
-      const peerCursor = readCursors[peerKey] ?? readCursors[peerId];
-      if (!isMessageReadByCursor(m.id, peerCursor)) return false;
-      const cursorTime = readCursorTimesRef.current[peerKey];
-      if (cursorTime && Number.isFinite(msgAt)) {
-        const curAt = Date.parse(cursorTime);
-        if (Number.isFinite(curAt) && curAt < msgAt) return false;
-      }
-      return true;
-    };
-
-    if (chat?.type === "dm") {
-      const peerId = otherMember?.id;
-      if (!peerId) return false;
-      return peerReadMessage(peerId);
-    }
-
-    return membersForReadReceipts()
-      .filter((mem) => mem.id.toLowerCase() !== user.id.toLowerCase())
-      .some((mem) => peerReadMessage(mem.id));
+    return isOwnMessageReadByPeers(m, user.id, membersForReadReceipts(), readCursors);
   }
 
   const peerActivityLabel = useMemo(() => {
@@ -709,11 +648,13 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
         const incoming = msg.message;
         const fromOther = incoming.senderId.toLowerCase() !== user?.id?.toLowerCase();
         const afterAppend = (next: Message[]) => {
-          if (fromOther && !stickToBottomRef.current) {
+          const listEl = listRef.current;
+          const atBottom = listEl ? isPinnedToBottom(listEl, 16) : stickToBottomRef.current;
+          if (fromOther && !atBottom) {
             serverUnreadCountRef.current += 1;
             setServerUnreadCount((c) => c + 1);
             suppressAutoReadRef.current = true;
-          } else if (fromOther && stickToBottomRef.current) {
+          } else if (fromOther && atBottom) {
             if (canMarkReadNow()) {
               scheduleMarkChatRead(incoming.id);
             } else {
@@ -721,7 +662,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
               setServerUnreadCount((c) => c + 1);
               suppressAutoReadRef.current = true;
             }
-          } else if (!fromOther && stickToBottomRef.current) {
+          } else if (!fromOther && atBottom) {
             requestAnimationFrame(() => scrollToBottom(false));
           }
           return next;
@@ -763,19 +704,11 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       if (msg.type === "read_receipt" && msg.chatId === chatId) {
         const incomingId = msg.messageId.trim().toLowerCase();
         const userKey = msg.userId.toLowerCase();
-        const updatedAt = msg.updatedAt ?? new Date().toISOString();
         const cur = readCursorsRef.current[userKey];
         const merged = mergeReadCursor(cur, incomingId);
-        if (cur === merged) {
-          const curTime = readCursorTimesRef.current[userKey];
-          const curAt = curTime ? Date.parse(curTime) : NaN;
-          const incAt = Date.parse(updatedAt);
-          if (!Number.isFinite(incAt) || (Number.isFinite(curAt) && incAt <= curAt)) return;
-        }
+        if (merged === cur) return;
         const nextCursors = { ...readCursorsRef.current, [userKey]: merged };
-        const nextTimes = { ...readCursorTimesRef.current, [userKey]: updatedAt };
         readCursorsRef.current = nextCursors;
-        readCursorTimesRef.current = nextTimes;
         setReadCursors(nextCursors);
       }
       if (msg.type === "reaction" && msg.chatId === chatId) {
@@ -950,10 +883,6 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
             readCursorsRef.current[userKey] = mine;
             setReadCursors((prev) => ({ ...prev, [userKey]: mine }));
             lastPersistedReadRef.current = mine;
-            const ownCursor = cursors?.find((c) => c.userId.toLowerCase() === userKey);
-            if (ownCursor?.updatedAt) {
-              readCursorTimesRef.current[userKey] = ownCursor.updatedAt;
-            }
           }
           suppressAutoReadRef.current = unread > 0;
           setMessages(list as Message[]);
@@ -1063,31 +992,22 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       }
       const id = chatId;
       const list = messagesRef.current;
-      if (!id || !list.length) return;
+      const listEl = listRef.current;
+      if (!id || !list.length || !listEl) return;
 
-      const userKey = user?.id?.toLowerCase();
-      let lastIncoming: string | null = null;
-      for (let i = list.length - 1; i >= 0; i--) {
-        const m = list[i]!;
-        if ((m.messageType ?? "text") === "system") continue;
-        if (userKey && m.senderId.toLowerCase() === userKey) continue;
-        lastIncoming = m.id;
-        break;
-      }
-      if (!lastIncoming) return;
+      const target = resolveMarkReadTargetUtil(list, listEl, user?.id ?? "");
+      if (!target) return;
 
       const lastRead = lastMarkedReadRef.current;
-      const atBottom = stickToBottomRef.current;
       const alreadyMarked =
         lastRead &&
         lastMarkedReadChatIdRef.current === id &&
-        compareMessageId(lastRead, lastIncoming) >= 0;
+        compareMessageId(lastRead, target) >= 0;
 
-      if (!atBottom && !alreadyMarked) return;
+      if (!alreadyMarked && !isPinnedToBottom(listEl, 16)) return;
       if (!canMarkChatReadNow()) return;
 
-      const targetId = alreadyMarked ? lastRead! : lastIncoming;
-      const apiId = canonicalMessageId(targetId);
+      const apiId = canonicalMessageId(alreadyMarked ? lastRead! : target);
       void markChatReadApi(id, apiId)
         .then(() => {
           window.dispatchEvent(new CustomEvent("wm:chat-read", { detail: { chatId: id } }));
