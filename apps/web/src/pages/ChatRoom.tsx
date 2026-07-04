@@ -60,7 +60,8 @@ import {
 } from "../utils/chatUnread";
 import {
   chatMembersForReadReceipts,
-  isOwnMessageReadByPeers,
+  isOwnMessageReadByAnyPeer,
+  isOwnMessageReadByDmPeer,
   resolveMarkReadTarget as resolveMarkReadTargetUtil,
 } from "../utils/chatReadReceipts";
 import { getMessageReaders, mergeReadCursor } from "../utils/messageRead";
@@ -149,8 +150,12 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   editDraftRef.current = editDraft;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const selectionMode = selectedIds.size > 0;
-  const [readCursors, setReadCursors] = useState<Record<string, string>>({});
-  const readCursorsRef = useRef<Record<string, string>>({});
+  const [myReadCursor, setMyReadCursor] = useState<string | null>(null);
+  const myReadCursorRef = useRef<string | null>(null);
+  const [peerReadCursors, setPeerReadCursors] = useState<Record<string, string>>({});
+  const peerReadCursorsRef = useRef<Record<string, string>>({});
+  const [peerReadCursorTimes, setPeerReadCursorTimes] = useState<Record<string, string>>({});
+  const peerReadCursorTimesRef = useRef<Record<string, string>>({});
   const messagesRef = useRef<Message[]>([]);
   const hasMoreOlderRef = useRef(true);
   const [peerActivities, setPeerActivities] = useState<Map<string, PeerActivityKind>>(() => new Map());
@@ -187,13 +192,28 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   }, [loading]);
 
   function applyReadCursors(rows: { userId: string; lastReadMessageId: string; updatedAt?: string }[]) {
-    const map = { ...readCursorsRef.current };
+    if (!user?.id) return;
+    const selfKey = user.id.toLowerCase();
+    const peers = { ...peerReadCursorsRef.current };
+    const peerTimes = { ...peerReadCursorTimesRef.current };
+    let mine = myReadCursorRef.current;
+
     for (const r of rows) {
       const key = r.userId.toLowerCase();
-      map[key] = mergeReadCursor(map[key], r.lastReadMessageId);
+      if (key === selfKey) {
+        mine = mergeReadCursor(mine ?? undefined, r.lastReadMessageId);
+        continue;
+      }
+      peers[key] = mergeReadCursor(peers[key], r.lastReadMessageId);
+      if (r.updatedAt) peerTimes[key] = r.updatedAt;
     }
-    readCursorsRef.current = map;
-    setReadCursors(map);
+
+    myReadCursorRef.current = mine;
+    peerReadCursorsRef.current = peers;
+    peerReadCursorTimesRef.current = peerTimes;
+    setMyReadCursor(mine);
+    setPeerReadCursors(peers);
+    setPeerReadCursorTimes(peerTimes);
   }
 
   function canonicalMessageId(messageId: string): string {
@@ -206,7 +226,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   }
 
   function membersForReadReceipts(): User[] {
-    return chatMembersForReadReceipts(chat, user ?? null, readCursors);
+    return chatMembersForReadReceipts(chat, user ?? null, peerReadCursors);
   }
 
   function resolveMarkReadTarget(): string | null {
@@ -256,14 +276,13 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
   function markChatRead(messageId: string) {
     if (!chatId || !user?.id || !canMarkReadNow() || !messagesReady) return;
     const normalized = messageId.trim().toLowerCase();
-    const userKey = user.id.toLowerCase();
-    const mine = readCursorsRef.current[userKey] ?? readCursorsRef.current[user.id];
+    const mine = myReadCursorRef.current;
     if (mine && compareMessageId(mine, normalized) >= 0) {
       persistMarkRead(messageId);
       return;
     }
-    readCursorsRef.current[userKey] = normalized;
-    setReadCursors((prev) => ({ ...prev, [userKey]: normalized }));
+    myReadCursorRef.current = normalized;
+    setMyReadCursor(normalized);
     lastMarkedReadRef.current = normalized;
     lastMarkedReadChatIdRef.current = chatId;
     persistMarkRead(messageId);
@@ -299,8 +318,12 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
 
   useEffect(() => {
     setSelectedIds(new Set());
-    setReadCursors({});
-    readCursorsRef.current = {};
+    setMyReadCursor(null);
+    myReadCursorRef.current = null;
+    setPeerReadCursors({});
+    peerReadCursorsRef.current = {};
+    setPeerReadCursorTimes({});
+    peerReadCursorTimesRef.current = {};
     lastMarkedReadRef.current = null;
     lastMarkedReadChatIdRef.current = null;
     lastPersistedReadRef.current = null;
@@ -387,12 +410,17 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
 
   function getPeerReaders(m: Message) {
     if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return [];
-    return getMessageReaders(m.id, m.senderId, membersForReadReceipts(), readCursors);
+    return getMessageReaders(m.id, m.senderId, membersForReadReceipts(), peerReadCursors);
   }
 
   function isMessageReadByPeers(m: Message): boolean {
     if (!user?.id || m.senderId.toLowerCase() !== user.id.toLowerCase()) return false;
-    return isOwnMessageReadByPeers(m, user.id, membersForReadReceipts(), readCursors);
+    if (chat?.type === "dm") {
+      const peerId = otherMember?.id;
+      if (!peerId) return false;
+      return isOwnMessageReadByDmPeer(m, peerId, peerReadCursors, peerReadCursorTimes);
+    }
+    return isOwnMessageReadByAnyPeer(m, user.id, membersForReadReceipts(), peerReadCursors, peerReadCursorTimes);
   }
 
   const peerActivityLabel = useMemo(() => {
@@ -401,9 +429,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
     return formatPeerActivity(peerActivities, names, chat.type === "group");
   }, [chat, peerActivities]);
 
-  const myLastReadId = user?.id
-    ? (readCursors[user.id.toLowerCase()] ?? readCursors[user.id] ?? readCursorsRef.current[user.id.toLowerCase()] ?? null)
-    : null;
+  const myLastReadId = user?.id ? (myReadCursor ?? myReadCursorRef.current) : null;
   const unreadBounds = useMemo(
     () =>
       user?.id
@@ -422,7 +448,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       countUnreadBelowViewport(
         list,
         messagesRef.current,
-        readCursorsRef.current[user.id] ?? null,
+        myReadCursorRef.current,
         user.id,
         serverUnreadCountRef.current
       )
@@ -701,15 +727,33 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
           prev.map((m) => (m.id === msg.message.id ? { ...m, ...msg.message } : m))
         );
       }
-      if (msg.type === "read_receipt" && msg.chatId === chatId) {
+      if (msg.type === "read_receipt" && msg.chatId === chatId && user?.id) {
         const incomingId = msg.messageId.trim().toLowerCase();
         const userKey = msg.userId.toLowerCase();
-        const cur = readCursorsRef.current[userKey];
+        const selfKey = user.id.toLowerCase();
+        const updatedAt = msg.updatedAt ?? new Date().toISOString();
+
+        if (userKey === selfKey) {
+          const cur = myReadCursorRef.current;
+          const merged = mergeReadCursor(cur ?? undefined, incomingId);
+          if (merged === cur) return;
+          myReadCursorRef.current = merged;
+          setMyReadCursor(merged);
+          return;
+        }
+
+        const cur = peerReadCursorsRef.current[userKey];
         const merged = mergeReadCursor(cur, incomingId);
-        if (merged === cur) return;
-        const nextCursors = { ...readCursorsRef.current, [userKey]: merged };
-        readCursorsRef.current = nextCursors;
-        setReadCursors(nextCursors);
+        if (merged === cur) {
+          const prevAt = peerReadCursorTimesRef.current[userKey];
+          const prevTime = prevAt ? Date.parse(prevAt) : NaN;
+          const incTime = Date.parse(updatedAt);
+          if (!Number.isFinite(incTime) || (Number.isFinite(prevTime) && incTime <= prevTime)) return;
+        }
+        peerReadCursorsRef.current = { ...peerReadCursorsRef.current, [userKey]: merged };
+        peerReadCursorTimesRef.current = { ...peerReadCursorTimesRef.current, [userKey]: updatedAt };
+        setPeerReadCursors({ ...peerReadCursorsRef.current });
+        setPeerReadCursorTimes({ ...peerReadCursorTimesRef.current });
       }
       if (msg.type === "reaction" && msg.chatId === chatId) {
         setMessages((prev) =>
@@ -879,9 +923,8 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
           if (cursors?.length) applyReadCursors(cursors);
           if (user?.id && myLastReadMessageId) {
             const mine = myLastReadMessageId.trim().toLowerCase();
-            const userKey = user.id.toLowerCase();
-            readCursorsRef.current[userKey] = mine;
-            setReadCursors((prev) => ({ ...prev, [userKey]: mine }));
+            myReadCursorRef.current = mine;
+            setMyReadCursor(mine);
             lastPersistedReadRef.current = mine;
           }
           suppressAutoReadRef.current = unread > 0;
@@ -1040,7 +1083,7 @@ export default function ChatRoom({ chatId, draftPeer, onDraftChatCreated, onClos
       serverUnreadCountRef.current > 0 && user?.id
         ? findUnreadBounds(
             messagesRef.current,
-            readCursorsRef.current[user.id.toLowerCase()] ?? readCursorsRef.current[user.id] ?? null,
+            myReadCursorRef.current ?? null,
             user.id,
             serverUnreadCountRef.current
           ).first
