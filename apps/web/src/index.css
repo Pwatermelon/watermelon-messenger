@@ -6110,6 +6110,70 @@ a {
   color: var(--muted);
 }
 
+/* ── Public home / SEO landing ── */
+.home-landing-page {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.home-landing-main,
+.wm-seo-landing {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 3rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.home-landing-brand {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+
+.home-landing-brand h1,
+.wm-seo-landing h1 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+}
+
+.home-landing-tagline,
+.wm-seo-landing p strong {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.home-landing-intro,
+.wm-seo-landing > p {
+  margin: 0 0 1.25rem;
+}
+
+.wm-seo-landing h2 {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 1.1rem;
+}
+
+.wm-seo-landing ul {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+
+.home-landing-actions {
+  margin: 1.5rem 0;
+}
+
+.home-landing-cta {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.home-landing-links a,
+.wm-seo-landing a {
+  color: var(--accent, #e84855);
+}
+
 /* ── Watermelon Login ── */
 .login-page {
   min-height: 100vh;

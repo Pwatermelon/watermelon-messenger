@@ -117,8 +117,7 @@ function buildLandingBody() {
     .map((item) => `      <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a></li>`)
     .join("\n");
 
-  return `<noscript>
-  <main class="wm-seo-landing">
+  return `<main class="wm-seo-landing" id="wm-seo-fallback">
     <h1>${escapeHtml(landing.headline)}</h1>
     <p><strong>${escapeHtml(landing.tagline)}</strong></p>
     <p>${escapeHtml(landing.intro)}</p>
@@ -130,8 +129,7 @@ ${features}
     <ul>
 ${links}
     </ul>
-  </main>
-</noscript>`;
+  </main>`;
 }
 
 function buildLoginBody() {
@@ -146,7 +144,8 @@ function buildLoginBody() {
 }
 
 function injectSeoBody(html, seoBody) {
-  const withoutBody = html.replace(/\s*<noscript>[\s\S]*?<\/noscript>/gi, "");
+  let withoutBody = html.replace(/\s*<main class="wm-seo-landing"[\s\S]*?<\/main>/gi, "");
+  withoutBody = withoutBody.replace(/\s*<noscript>[\s\S]*?<\/noscript>/gi, "");
   if (!seoBody) {
     return withoutBody;
   }

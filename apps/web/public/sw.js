@@ -1,5 +1,5 @@
-const CACHE = "wm-static-v6";
-const OFFLINE_URLS = ["/", "/index.html"];
+const CACHE = "wm-static-v7";
+const OFFLINE_URLS = ["/home.html"];
 
 /** JWT из приложения — без него /media/* не отдаётся (см. API). */
 let authToken = null;
@@ -52,6 +52,11 @@ function isNavigationRequest(request) {
   return request.mode === "navigate" || (request.method === "GET" && request.headers.get("accept")?.includes("text/html"));
 }
 
+function navigationCacheKey(url) {
+  if (url.pathname === "/") return "/home.html";
+  return url.pathname;
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -69,11 +74,14 @@ self.addEventListener("fetch", (event) => {
         .then((res) => {
           if (res.ok && url.origin === self.location.origin) {
             const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put("/index.html", copy));
+            const cacheKey = navigationCacheKey(url);
+            caches.open(CACHE).then((c) => c.put(cacheKey, copy));
           }
           return res;
         })
-        .catch(() => caches.match(request).then((r) => r || caches.match("/index.html") || caches.match("/")))
+        .catch(() =>
+          caches.match(navigationCacheKey(url)).then((r) => r || caches.match("/home.html"))
+        )
     );
     return;
   }
@@ -87,7 +95,7 @@ self.addEventListener("fetch", (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(request).then((r) => r || caches.match("/")))
+      .catch(() => caches.match(request).then((r) => r || caches.match("/home.html")))
   );
 });
 

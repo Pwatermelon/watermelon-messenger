@@ -6,7 +6,7 @@ import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import BetaWelcome from "./pages/BetaWelcome";
 import BetaPending from "./pages/BetaPending";
-import ChatLayout from "./pages/ChatLayout";
+import HomeOrApp from "./pages/HomeOrApp";
 import ChatLegacyRedirect from "./pages/ChatLegacyRedirect";
 import IconPreview from "./pages/IconPreview";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -62,8 +62,9 @@ export default function App() {
       <Route path="/beta/welcome" element={<AuthRequired><BetaWelcome /></AuthRequired>} />
       <Route path="/admin" element={<Navigate to="/" replace />} />
 
+      <Route path="/" element={<HomeOrApp />} />
+
       <Route element={<AuthRequired><MessengerLayout /></AuthRequired>}>
-        <Route path="/" element={<ChatLayout />} />
         <Route path="chat/:chatId" element={<ChatLegacyRedirect />} />
         <Route path="settings" element={<Navigate to="/" replace state={{ openSettings: true }} />} />
         <Route path="profile" element={<Navigate to="/" replace state={{ openProfile: null }} />} />
