@@ -4,7 +4,6 @@
 Production: [watermelon-messenger.ru](https://watermelon-messenger.ru)
 
 ---
-
 ## Содержание
 
 - [О проекте](#о-проекте)
