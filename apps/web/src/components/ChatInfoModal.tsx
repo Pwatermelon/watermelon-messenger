@@ -486,36 +486,41 @@ export default function ChatInfoModal({
 
         <div className="chat-info-header">
           <div className="chat-info-header-avatar">
-            <div className="profile-avatar-wrap">
-              {isGroup && isGroupAdmin && (
-                <input
-                  type="file"
-                  ref={groupAvatarInputRef}
-                  accept="image/*"
-                  onChange={onGroupAvatarPick}
-                  style={{ display: "none" }}
-                />
-              )}
+            {isGroup && isGroupAdmin && (
+              <input
+                type="file"
+                ref={groupAvatarInputRef}
+                accept="image/*"
+                onChange={onGroupAvatarPick}
+                style={{ display: "none" }}
+              />
+            )}
+            <div className="chat-info-header-avatar-circle">
               {headerAvatarPath ? (
-                <UserAvatar path={headerAvatarPath} name={headerTitle} imgClassName="contact-info-avatar" />
+                <UserAvatar
+                  path={headerAvatarPath}
+                  name={headerTitle}
+                  imgClassName="chat-info-header-avatar-img"
+                  eager
+                />
               ) : (
                 <div className="contact-info-avatar-placeholder">
                   {headerTitle.slice(0, 1).toUpperCase()}
                 </div>
               )}
-              {isGroup && isGroupAdmin && (
-                <button
-                  type="button"
-                  className="profile-avatar-edit"
-                  onClick={() => groupAvatarInputRef.current?.click()}
-                  disabled={sending}
-                  aria-label="Сменить фото группы"
-                  title="Сменить фото группы"
-                >
-                  📷
-                </button>
-              )}
             </div>
+            {isGroup && isGroupAdmin && (
+              <button
+                type="button"
+                className="profile-avatar-edit chat-info-header-avatar-edit"
+                onClick={() => groupAvatarInputRef.current?.click()}
+                disabled={sending}
+                aria-label="Сменить фото группы"
+                title="Сменить фото группы"
+              >
+                📷
+              </button>
+            )}
           </div>
           <p className="chat-info-header-title">{headerTitle}</p>
           {!isGroup && otherMember?.yandexLogin && (
