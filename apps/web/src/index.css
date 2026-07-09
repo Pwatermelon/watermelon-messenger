@@ -5874,13 +5874,11 @@ a {
   background: rgba(220, 60, 60, 0.55);
 }
 
-.profile-avatar-btn {
-  padding: 0;
-  border: none;
-  background: none;
-  border-radius: 50%;
-  cursor: pointer;
+.lightbox-media-skeleton {
   display: block;
+  width: 100%;
+  min-height: 120px;
+  background: var(--border);
 }
 
 .profile-photo-open {
@@ -7544,6 +7542,38 @@ video.message-circle {
   position: relative;
   display: inline-block;
   margin-bottom: 0.5rem;
+  width: 96px;
+  height: 96px;
+}
+
+.profile-avatar-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: block;
+  width: 96px;
+  height: 96px;
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-avatar-wrap .media-image-shell {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.profile-avatar-wrap .media-image,
+.profile-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid var(--bg);
+  box-sizing: border-box;
 }
 
 .profile-avatar,
@@ -7648,10 +7678,23 @@ video.message-circle {
   overflow: hidden;
 }
 
-.profile-photo-item img {
+.profile-photo-item img,
+.profile-photo-item .media-image,
+.profile-photo-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.profile-photo-item .media-image-shell {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.profile-photo-open .media-image-shell {
+  width: 100%;
+  height: 100%;
 }
 
 .profile-photo-remove {

@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import { LightboxDownloadButton } from "./LightboxDownloadButton";
+import { useAuthenticatedMediaSrc } from "../hooks/useAuthenticatedMediaSrc";
+
+function LightboxImg({ src, className }: { src: string; className?: string }) {
+  const resolved = useAuthenticatedMediaSrc(src);
+  if (!resolved) return <span className={`${className ?? ""} lightbox-media-skeleton`} aria-hidden />;
+  return <img src={resolved} alt="" className={className} />;
+}
 
 type Props = {
   images: string[];
@@ -91,7 +98,7 @@ export default function ImageLightbox({
       )}
       <div className="lightbox-gallery-body">
         <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
-          <img src={current} alt="" className="lightbox-img" />
+          <LightboxImg src={current} className="lightbox-img" />
         </div>
         {images.length > 1 && (
           <div className="lightbox-thumbs" role="listbox" aria-label="Миниатюры" onClick={(e) => e.stopPropagation()}>
@@ -104,7 +111,7 @@ export default function ImageLightbox({
                 aria-label={`Фото ${i + 1}`}
                 aria-selected={i === index}
               >
-                <img src={src} alt="" />
+                <LightboxImg src={src} className="" />
               </button>
             ))}
           </div>

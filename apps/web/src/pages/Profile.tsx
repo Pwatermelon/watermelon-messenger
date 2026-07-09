@@ -10,7 +10,7 @@ import BirthdayInfoBlock from "../components/BirthdayInfoBlock";
 import ImageLightbox from "../components/ImageLightbox";
 import ImageCropModal from "../components/ImageCropModal";
 import { useOverlayDismiss } from "../hooks/useOverlayDismiss";
-import { mediaUrl as resolveMediaUrl, canonicalStoragePath } from "../utils/mediaUrl";
+import { canonicalStoragePath } from "../utils/mediaUrl";
 
 type ProfileProps = {
   modal?: boolean;
@@ -22,10 +22,6 @@ type ProfileProps = {
   onStartDm?: (userId: string) => Promise<boolean>;
 };
 
-function mediaFullUrl(path: string | null | undefined): string | null {
-  if (!path) return null;
-  return resolveMediaUrl(path);
-}
 
 function buildAvatarLightboxPaths(profile: User): string[] {
   const crop = profile.avatarUrl;
@@ -337,8 +333,6 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
 
   const photos = buildProfilePhotoPaths(profile);
   const avatarPaths = buildAvatarLightboxPaths(profile);
-  const avatarUrls = avatarPaths.map((p) => mediaFullUrl(p)).filter(Boolean) as string[];
-  const photoUrls = photos.map((p) => mediaFullUrl(p)).filter(Boolean) as string[];
 
   const showPageToolbar = !modal && !isOwn && !!profile;
 
@@ -389,7 +383,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
             <button
               type="button"
               className="profile-avatar-btn"
-              onClick={() => avatarUrls.length > 0 && setAvatarLightboxIndex(0)}
+              onClick={() => avatarPaths.length > 0 && setAvatarLightboxIndex(0)}
               title="Открыть аватар"
             >
               <MediaImage
@@ -558,13 +552,10 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
         ) : (
           <>
             <div className="profile-photos-grid">
-              {photos.map((p, i) => {
-                const url = mediaFullUrl(p);
-                if (!url) return null;
-                return (
+              {photos.map((p, i) => (
                   <div key={p} className="profile-photo-item">
                     <button type="button" className="profile-photo-open" onClick={() => setPhotoLightboxIndex(i)}>
-                      <img src={url} alt="" />
+                      <MediaImage src={p} alt="" className="profile-photo-img" />
                     </button>
                     {isOwn && (
                       <button type="button" className="profile-photo-remove" onClick={() => void removePhoto(p)} aria-label="Удалить">
@@ -572,8 +563,7 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
                       </button>
                     )}
                   </div>
-                );
-              })}
+                ))}
             </div>
             {isOwn && photos.length > 0 && (
               <button type="button" className="profile-view-all-btn profile-view-all-btn-block" onClick={() => setPhotoLightboxIndex(0)}>
@@ -586,9 +576,10 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
 
       {message && <p className="profile-message">{message}</p>}
 
-      {avatarLightboxIndex !== null && avatarUrls.length > 0 && (
+      {avatarLightboxIndex !== null && avatarPaths.length > 0 && (
         <ImageLightbox
-          images={avatarUrls}
+          images={avatarPaths}
+          downloadHrefs={avatarPaths}
           initialIndex={avatarLightboxIndex}
           onClose={() => setAvatarLightboxIndex(null)}
           canDelete={isOwn}
@@ -597,9 +588,10 @@ export default function Profile({ modal, onClose, userIdProp, onOpenSettings, on
         />
       )}
 
-      {photoLightboxIndex !== null && photoUrls.length > 0 && (
+      {photoLightboxIndex !== null && photos.length > 0 && (
         <ImageLightbox
-          images={photoUrls}
+          images={photos}
+          downloadHrefs={photos}
           initialIndex={photoLightboxIndex}
           onClose={() => setPhotoLightboxIndex(null)}
           canDelete={isOwn}
