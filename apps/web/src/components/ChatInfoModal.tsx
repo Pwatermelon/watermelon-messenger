@@ -7,8 +7,10 @@ import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
 import AddGroupMemberModal from "./AddGroupMemberModal";
 import { IconBell, IconBellOff, IconFile, IconPlus, IconUser } from "./Icons";
 import { getChatShared, updateChatNotifications } from "../api";
-import { mediaUrl } from "../utils/mediaUrl";
 import { downloadMediaFile } from "../utils/mediaFetch";
+import { MediaImage } from "./MediaImage";
+import { UserAvatar } from "./UserAvatar";
+import { useAuthenticatedMediaSrc } from "../hooks/useAuthenticatedMediaSrc";
 
 type TabId = "participants" | ChatSharedCategory;
 
@@ -61,7 +63,6 @@ function isCircleItem(item: ChatSharedItem): boolean {
 
 function sharedItemToMedia(item: ChatSharedItem): MediaLightboxItem | null {
   if (!item.attachmentUrl || isCircleItem(item)) return null;
-  const url = mediaUrl(item.attachmentUrl);
   const meta = item.attachmentMetadata;
   const base = {
     downloadPath: item.attachmentUrl,
@@ -69,17 +70,30 @@ function sharedItemToMedia(item: ChatSharedItem): MediaLightboxItem | null {
   };
   if (item.messageType === "video") {
     return {
-      url,
+      url: item.attachmentUrl,
       kind: "video",
-      poster: meta?.posterUrl ? mediaUrl(meta.posterUrl) : null,
+      poster: meta?.posterUrl ?? null,
       width: meta?.width,
       height: meta?.height,
       duration: meta?.duration,
       ...base,
     };
   }
-  if (item.messageType === "image") return { url, kind: "image", ...base };
+  if (item.messageType === "image") return { url: item.attachmentUrl, kind: "image", ...base };
   return null;
+}
+
+function ChatInfoVideoThumb({ path, className }: { path: string; className?: string }) {
+  const src = useAuthenticatedMediaSrc(path);
+  if (!src) return <span className={`${className ?? ""} chat-info-media-skeleton`} aria-hidden />;
+  return (
+    <>
+      <video src={src} muted preload="metadata" className={className} />
+      <span className="chat-info-media-play" aria-hidden>
+        ▶
+      </span>
+    </>
+  );
 }
 
 export default function ChatInfoModal({
@@ -238,11 +252,7 @@ export default function ChatInfoModal({
                   onClick={() => openProfile(m.id)}
                 >
                   <div className="chat-info-member-avatar">
-                    {m.avatarUrl ? (
-                      <img src={mediaUrl(m.avatarUrl)} alt="" />
-                    ) : (
-                      (m.username ?? "?").slice(0, 1).toUpperCase()
-                    )}
+                    <UserAvatar path={m.avatarUrl} name={m.username ?? "?"} imgClassName="chat-info-member-avatar-img" />
                   </div>
                   <div className="chat-info-member-text">
                     <div className="chat-info-member-name-row">
@@ -290,8 +300,7 @@ export default function ChatInfoModal({
       <>
         <div className="chat-info-media-grid">
           {items.map((item, i) => {
-            const url = item.attachmentUrl ? mediaUrl(item.attachmentUrl) : "";
-            if (!url) return null;
+            if (!item.attachmentUrl) return null;
             const isVideo = item.messageType === "video";
             const isCircle = isCircleItem(item);
             if (isCircle) return null;
@@ -304,14 +313,9 @@ export default function ChatInfoModal({
                 aria-label="Открыть медиа"
               >
                 {isVideo ? (
-                  <>
-                    <video src={url} muted preload="metadata" className="chat-info-media-thumb" />
-                    <span className="chat-info-media-play" aria-hidden>
-                      ▶
-                    </span>
-                  </>
+                  <ChatInfoVideoThumb path={item.attachmentUrl} className="chat-info-media-thumb" />
                 ) : (
-                  <img src={url} alt="" className="chat-info-media-thumb" loading="lazy" />
+                  <MediaImage src={item.attachmentUrl} alt="" className="chat-info-media-thumb" />
                 )}
               </button>
             );
@@ -421,8 +425,7 @@ export default function ChatInfoModal({
       <>
         <ul className="chat-info-voice-list">
           {items.map((item) => {
-            const src = item.attachmentUrl ? mediaUrl(item.attachmentUrl) : "";
-            if (!src) return null;
+            if (!item.attachmentUrl) return null;
             return (
               <li key={item.messageId} className="chat-info-voice-item">
                 <div className="chat-info-voice-meta">
@@ -435,22 +438,22 @@ export default function ChatInfoModal({
                     className="chat-info-circle-preview"
                     onClick={() =>
                       setCircleLightbox({
-                        src,
+                        src: item.attachmentUrl!,
                         duration: item.attachmentMetadata?.duration,
                       })
                     }
                     aria-label="Открыть кружок"
                   >
                     <CircleVideoThumb
-                      src={src}
-                      poster={item.attachmentMetadata?.posterUrl ? mediaUrl(item.attachmentMetadata.posterUrl) : null}
+                      src={item.attachmentUrl}
+                      poster={item.attachmentMetadata?.posterUrl ?? null}
                     />
                     <span className="chat-info-media-play" aria-hidden>
                       ▶
                     </span>
                   </button>
                 ) : (
-                  <VoiceMessagePlayer src={src} duration={item.attachmentMetadata?.duration} />
+                  <VoiceMessagePlayer src={item.attachmentUrl} duration={item.attachmentMetadata?.duration} />
                 )}
               </li>
             );
@@ -472,13 +475,7 @@ export default function ChatInfoModal({
 
   if (!open) return null;
 
-  const headerAvatar = isGroup
-    ? chat.avatarUrl
-      ? mediaUrl(chat.avatarUrl)
-      : null
-    : otherMember?.avatarUrl
-      ? mediaUrl(otherMember.avatarUrl)
-      : null;
+  const headerAvatarPath = isGroup ? chat.avatarUrl : otherMember?.avatarUrl;
 
   return (
     <div className="contact-info-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Информация о чате">
@@ -499,8 +496,8 @@ export default function ChatInfoModal({
                   style={{ display: "none" }}
                 />
               )}
-              {headerAvatar ? (
-                <img src={headerAvatar} alt="" className="contact-info-avatar" />
+              {headerAvatarPath ? (
+                <UserAvatar path={headerAvatarPath} name={headerTitle} imgClassName="contact-info-avatar" />
               ) : (
                 <div className="contact-info-avatar-placeholder">
                   {headerTitle.slice(0, 1).toUpperCase()}
