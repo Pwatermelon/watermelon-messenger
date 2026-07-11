@@ -36,7 +36,6 @@ function loadUrls(host) {
   }
   return [
     `${base}/`,
-    `${base}/login`,
     `${base}/legal/privacy`,
     `${base}/legal/personal-data-consent`,
     `${base}/legal/terms`,

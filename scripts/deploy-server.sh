@@ -160,7 +160,7 @@ ping_indexnow() {
   local base="https://${DOMAIN}"
   local payload
   payload=$(cat <<EOF
-{"host":"${DOMAIN}","key":"${key}","keyLocation":"${base}/${key}.txt","urlList":["${base}/","${base}/login","${base}/legal/privacy","${base}/legal/personal-data-consent","${base}/legal/terms","${base}/faq"]}
+{"host":"${DOMAIN}","key":"${key}","keyLocation":"${base}/${key}.txt","urlList":["${base}/","${base}/legal/privacy","${base}/legal/personal-data-consent","${base}/legal/terms","${base}/faq"]}
 EOF
 )
   echo "==> IndexNow ping (${DOMAIN})"
