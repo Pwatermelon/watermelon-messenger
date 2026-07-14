@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import landing from "../../seo-landing.ru.json";
 import { BrandIcon } from "../components/BrandIcon";
@@ -7,10 +6,6 @@ import { useDocumentScroll } from "../hooks/useDocumentScroll";
 /** Публичная главная для гостей — без редиректа на /login (иначе роботы видят noindex). */
 export default function HomeLanding() {
   useDocumentScroll();
-
-  useEffect(() => {
-    document.getElementById("wm-seo-fallback")?.remove();
-  }, []);
 
   return (
     <div className="home-landing-page">

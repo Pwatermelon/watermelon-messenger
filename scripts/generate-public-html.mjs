@@ -117,7 +117,9 @@ function buildLandingBody() {
     .map((item) => `      <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a></li>`)
     .join("\n");
 
-  return `<main class="wm-seo-landing" id="wm-seo-fallback">
+  // Только для роботов без JS — в браузере с JS <noscript> не участвует в вёрстке и не скроллится.
+  return `<noscript>
+  <main class="wm-seo-landing" id="wm-seo-fallback">
     <h1>${escapeHtml(landing.headline)}</h1>
     <p><strong>${escapeHtml(landing.tagline)}</strong></p>
     <p>${escapeHtml(landing.intro)}</p>
@@ -129,7 +131,8 @@ ${features}
     <ul>
 ${links}
     </ul>
-  </main>`;
+  </main>
+</noscript>`;
 }
 
 function buildLoginBody() {

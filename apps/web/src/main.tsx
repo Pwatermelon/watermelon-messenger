@@ -13,6 +13,8 @@ if (typeof document !== "undefined") {
   html.lang = "ru";
   html.setAttribute("translate", "no");
   html.setAttribute("data-theme", savedTheme);
+  // SEO-fallback из home.html — только для роботов без JS; убираем до монтирования SPA.
+  document.getElementById("wm-seo-fallback")?.remove();
 }
 
 registerServiceWorker();

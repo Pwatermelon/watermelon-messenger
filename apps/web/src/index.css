@@ -87,6 +87,19 @@ html.document-scroll #root {
   min-height: 100dvh;
 }
 
+/* Мессенджер — фиксированный layout, body не должен скроллиться */
+body:has(.layout) {
+  overflow: hidden;
+  height: 100%;
+  height: 100dvh;
+}
+
+/* Старый home.html: скрыть SEO-блок, пока SPA ещё не смонтировалась */
+#root:not(:empty) ~ #wm-seo-fallback,
+#root:not(:empty) ~ noscript #wm-seo-fallback {
+  display: none !important;
+}
+
 input, button, textarea {
   font: inherit;
 }
